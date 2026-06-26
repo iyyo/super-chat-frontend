@@ -1,0 +1,111 @@
+.app-toast-viewport {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  z-index: 9999;
+  display: flex;
+  width: min(420px, calc(100vw - 32px));
+  flex-direction: column;
+  gap: 10px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.app-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow:
+    0 12px 40px rgba(15, 23, 42, 0.14),
+    0 4px 12px rgba(99, 102, 241, 0.12);
+  pointer-events: auto;
+  animation: toast-in 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-toast-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+}
+
+.app-toast-message {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #1e293b;
+}
+
+.app-toast-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: -4px -4px -4px 0;
+  border-radius: 8px;
+  color: #94a3b8;
+  transition: background 0.2s ease, color 0.2s ease;
+  cursor: pointer;
+}
+
+.app-toast-close:hover {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.app-toast-success {
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+.app-toast-success .app-toast-icon {
+  color: #16a34a;
+}
+
+.app-toast-error {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: linear-gradient(180deg, #fff 0%, #fffafa 100%);
+}
+
+.app-toast-error .app-toast-icon {
+  color: #dc2626;
+}
+
+.app-toast-warning {
+  border-color: rgba(245, 158, 11, 0.28);
+}
+
+.app-toast-warning .app-toast-icon {
+  color: #d97706;
+}
+
+.app-toast-info {
+  border-color: rgba(99, 102, 241, 0.28);
+}
+
+.app-toast-info .app-toast-icon {
+  color: var(--ifly-blue, #6366f1);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-toast {
+    animation: none;
+  }
+}

@@ -1,0 +1,44 @@
+/* 苹方：macOS 走 local，Windows 走 /public/fonts 自托管 woff2 */
+@font-face {
+  font-family: 'PingFang SC';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src:
+    local('PingFang SC'),
+    local('PingFangSC-Regular'),
+    url('/fonts/PingFangSC-Regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'PingFang SC';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src:
+    local('PingFang SC Medium'),
+    local('PingFangSC-Medium'),
+    url('/fonts/PingFangSC-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'PingFang SC';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src:
+    local('PingFang SC Semibold'),
+    local('PingFangSC-Semibold'),
+    url('/fonts/PingFangSC-Semibold.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'PingFang SC';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src:
+    local('PingFang SC Semibold'),
+    local('PingFangSC-Semibold'),
+    url('/fonts/PingFangSC-Semibold.woff2') format('woff2');
+}
