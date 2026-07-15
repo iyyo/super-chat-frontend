@@ -19,10 +19,20 @@
 :root {
   --ifly-font: 'PingFang SC', 'PingFang TC', 'Microsoft YaHei', '微软雅黑', 'Helvetica Neue', Arial,
     sans-serif;
+  --iflyrec-primary-rgb: 30, 100, 255;
+  --ifly-scrollbar-thumb: rgba(var(--iflyrec-primary-rgb), 0.16);
+  --ifly-scrollbar-thumb-hover: rgba(var(--iflyrec-primary-rgb), 0.28);
+  --ifly-scrollbar-track: transparent;
 }
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ifly-scrollbar-thumb) var(--ifly-scrollbar-track);
 }
 
 html,
@@ -42,9 +52,18 @@ body {
 
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--ifly-scrollbar-track);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: var(--ifly-scrollbar-thumb);
   border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ifly-scrollbar-thumb-hover);
 }

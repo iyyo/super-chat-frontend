@@ -2,6 +2,18 @@ export interface AuthUser {
   id: number
   username: string
   nickname?: string
+  email?: string | null
+}
+
+export interface UserProfile {
+  id: number
+  username: string
+  nickname: string
+  email: string | null
+}
+
+export interface UpdateProfilePayload {
+  nickname: string
 }
 
 export interface AuthTokens {

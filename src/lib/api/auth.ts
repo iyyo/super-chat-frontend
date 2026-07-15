@@ -1,7 +1,6 @@
 import { api } from '@/lib/api/client'
 import type {
   AuthResponse,
-  AuthUser,
   ForgotPasswordPayload,
   LoginPayload,
   LoginWithEmailPayload,
@@ -9,6 +8,8 @@ import type {
   RegisterPayload,
   ResetPasswordPayload,
   SendLoginCodePayload,
+  UpdateProfilePayload,
+  UserProfile,
 } from '@/types/auth'
 
 export const authApi = {
@@ -34,5 +35,8 @@ export const authApi = {
   resetPassword: (payload: ResetPasswordPayload) =>
     api.post<{ message: string }>('/auth/reset-password', payload),
 
-  me: () => api.get<AuthUser & { email: string | null }>('/auth/me'),
+  me: () => api.get<UserProfile>('/auth/me', { skipToast: true }),
+
+  updateProfile: (payload: UpdateProfilePayload) =>
+    api.patch<UserProfile>('/auth/profile', payload, { skipToast: true }),
 }

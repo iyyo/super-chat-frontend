@@ -10,7 +10,7 @@ html.official-route-active body {
   background: #ffffff;
   color: #1e1b4b;
   scrollbar-width: thin;
-  scrollbar-color: rgba(var(--brand-rgb), 0.22) transparent;
+  scrollbar-color: var(--ifly-scrollbar-thumb) var(--ifly-scrollbar-track);
 }
 
 html.official-route-active ::-webkit-scrollbar {
@@ -18,12 +18,16 @@ html.official-route-active ::-webkit-scrollbar {
 }
 
 html.official-route-active ::-webkit-scrollbar-thumb {
-  background: rgba(var(--brand-rgb), 0.22);
+  background: var(--ifly-scrollbar-thumb);
   border-radius: 999px;
 }
 
+html.official-route-active ::-webkit-scrollbar-thumb:hover {
+  background: var(--ifly-scrollbar-thumb-hover);
+}
+
 html.official-route-active ::-webkit-scrollbar-track {
-  background: #ffffff;
+  background: var(--ifly-scrollbar-track);
 }
 
 :root {
@@ -67,6 +71,9 @@ html.official-route-active ::-webkit-scrollbar-track {
   --iflyrec-primary-rgb: 30, 100, 255;
   --iflyrec-error-rgb: 255, 71, 84;
   --ifly-on-brand-rgb: 255, 255, 255;
+  --ifly-scrollbar-thumb: rgba(var(--iflyrec-primary-rgb), 0.16);
+  --ifly-scrollbar-thumb-hover: rgba(var(--iflyrec-primary-rgb), 0.28);
+  --ifly-scrollbar-track: transparent;
   /* 工作台语义色（仅引用上方 token，组件里禁止再写 hex） */
   --ws-bg: var(--ifly-bg-gray);
   --ws-panel: var(--ifly-surface-subtle);
@@ -81,6 +88,7 @@ html.official-route-active ::-webkit-scrollbar-track {
   --ws-brand-soft: var(--iflyrec-primary-soft);
   --ws-shell-radius: 24px;
   --ws-sidebar-w: 200px;
+  --ws-sidebar-w-collapsed: 64px;
   --ws-card-record-bg: linear-gradient(
     135deg,
     var(--ifly-heading) 0%,
@@ -1052,6 +1060,76 @@ html.lenis body {
 .official-nav-ifly-scrolled {
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 4px 24px rgba(var(--brand-rgb), 0.08);
+}
+
+.ifly-nav-action {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 15px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--ifly-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s var(--official-ease),
+    box-shadow 0.2s ease;
+}
+
+.ifly-nav-action:hover {
+  background: rgba(var(--brand-rgb), 0.06);
+  border-color: rgba(var(--brand-rgb), 0.12);
+  color: var(--ifly-blue);
+}
+
+.ifly-nav-action-optional {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .ifly-nav-action-optional {
+    display: inline-flex;
+  }
+}
+
+.ifly-nav-action.ifly-nav-action-hidden {
+  display: none;
+}
+
+.ifly-nav-action:active {
+  transform: scale(0.98);
+}
+
+.ifly-nav-action:focus-visible {
+  outline: 2px solid rgba(var(--brand-rgb), 0.28);
+  outline-offset: 3px;
+}
+
+.ifly-nav-action-primary {
+  min-width: 88px;
+  background: rgba(var(--brand-rgb), 0.1);
+  border-color: rgba(var(--brand-rgb), 0.16);
+  color: var(--ifly-blue);
+  font-weight: 600;
+}
+
+.ifly-nav-action-primary:hover {
+  background: var(--ifly-blue);
+  border-color: var(--ifly-blue);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(var(--brand-rgb), 0.18);
+  transform: translateY(-1px);
+}
+
+.ifly-nav-action-primary:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .ifly-btn-primary {

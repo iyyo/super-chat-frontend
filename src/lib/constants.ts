@@ -29,8 +29,16 @@ export const ROUTES = {
   explore: '/app/explore',
   profile: '/app/profile',
   manual: '/app/manual',
+  record: '/app/record',
   files: '/app/files',
+  fileDetail: (id: string) => `/app/files/${id}`,
+  share: (token: string) => `/share/${token}`,
 } as const
+
+export function buildShareUrl(token: string) {
+  if (typeof window === 'undefined') return `/share/${token}`
+  return `${window.location.origin}/share/${encodeURIComponent(token)}`
+}
 
 /** 工作台 URL 动作参数（官网入口 → 落地页弹窗） */
 export const APP_ACTIONS = {
@@ -43,12 +51,41 @@ export function appUrlWithAction(action: keyof typeof APP_ACTIONS) {
 }
 
 export const IMPORT_AUDIO_LANGUAGES = [
+  { id: 'zh-en', label: '中英混合', premium: false },
   { id: 'dialect', label: '方言免切换', premium: true },
   { id: 'cec', label: '中英粤混合', premium: true },
   { id: 'zh', label: '中文（普通话）', premium: false },
   { id: 'en', label: '英语', premium: false },
-  { id: 'zh-en', label: '中英混合', premium: false },
   { id: 'more', label: '更多', premium: false, more: true },
+] as const
+
+export const IMPORT_SPEAKER_COUNTS = [
+  { id: 'auto', label: '自动' },
+  ...Array.from({ length: 12 }, (_, i) => ({
+    id: String(i + 1),
+    label: `${i + 1}人`,
+  })),
+  { id: '12+', label: '12人以上' },
+] as const
+
+export const IMPORT_PROFESSIONAL_DOMAINS = [
+  { id: 'general', label: '通用' },
+  { id: 'law', label: '法律' },
+  { id: 'finance', label: '金融' },
+  { id: 'medical', label: '医疗' },
+  { id: 'tech', label: '科技' },
+  { id: 'sports', label: '体育' },
+  { id: 'education', label: '教育' },
+  { id: 'telecom', label: '运营商' },
+  { id: 'government', label: '政府' },
+  { id: 'game', label: '游戏' },
+  { id: 'ecommerce', label: '电商' },
+  { id: 'military', label: '军事' },
+  { id: 'enterprise', label: '企业' },
+  { id: 'life', label: '生活' },
+  { id: 'entertainment', label: '娱乐' },
+  { id: 'humanities', label: '人文历史' },
+  { id: 'auto', label: '汽车' },
 ] as const
 
 export const MANUAL_LANGUAGES = [
@@ -109,7 +146,7 @@ export const WORKSPACE_ACTIONS = [
     title: '开始录音',
     desc: '实时转写，边录边出稿',
     variant: 'primary' as const,
-    href: ROUTES.chat,
+    href: ROUTES.record,
   },
   {
     id: 'import',
@@ -162,6 +199,7 @@ export const WORKSPACE_RECENT_FILES = [
 
 export const WORKSPACE_FILE_TABS = [
   { id: 'mine', label: '我的文件' },
+  { id: 'imports', label: '导入记录' },
   { id: 'star', label: '收藏文件' },
   { id: 'trash', label: '回收站' },
 ] as const
@@ -188,7 +226,19 @@ export const WORKSPACE_ALL_FILES = [
     tag: null,
     live: false,
   },
+  {
+    id: '6',
+    title: '新录音-2025年12月5日-11:14:05',
+    subtitle: null,
+    duration: '01:14',
+    date: '2025-12-05 11:14',
+    source: '网站',
+    tag: null,
+    live: false,
+  },
 ] as const
+
+export type WorkspaceFile = (typeof WORKSPACE_ALL_FILES)[number]
 
 export const WORKSPACE_ASSISTANT_NAME = '小谛'
 

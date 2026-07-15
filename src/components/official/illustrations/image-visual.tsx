@@ -34,7 +34,7 @@ export function ImageVisual({ theme = 'dark' }: VisualProps) {
             width="320"
             height="240"
             clipPath="url(#img-canvas-clip)"
-            preserveAspectRatio="xMidYMid cover"
+            preserveAspectRatio="xMidYMid slice"
             opacity="0.92"
           />
 

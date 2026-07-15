@@ -7,6 +7,7 @@ interface AuthState {
   user: AuthUser | null
   accessToken: string | null
   isAuthenticated: boolean
+  setUser: (user: AuthUser) => void
   login: (payload: LoginPayload) => Promise<void>
   loginWithEmail: (payload: LoginWithEmailPayload) => Promise<void>
   register: (payload: RegisterPayload) => Promise<void>
@@ -22,12 +23,29 @@ function setSession(
   set({ user, accessToken, isAuthenticated: true })
 }
 
+function mergePersistedState(persistedState: unknown, currentState: AuthState): AuthState {
+  const persisted =
+    typeof persistedState === 'object' && persistedState !== null
+      ? (persistedState as Partial<AuthState>)
+      : {}
+  const accessToken = persisted.accessToken ?? null
+
+  return {
+    ...currentState,
+    user: persisted.user ?? null,
+    accessToken,
+    isAuthenticated: Boolean(accessToken),
+  }
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
       accessToken: null,
       isAuthenticated: false,
+
+      setUser: (user) => set({ user }),
 
       login: async (payload) => {
         const { user, accessToken } = await authApi.login(payload)
@@ -61,6 +79,7 @@ export const useAuthStore = create<AuthState>()(
         accessToken: state.accessToken,
         isAuthenticated: state.isAuthenticated,
       }),
+      merge: mergePersistedState,
       onRehydrateStorage: () => (state) => {
         if (state?.accessToken) {
           localStorage.setItem('access_token', state.accessToken)

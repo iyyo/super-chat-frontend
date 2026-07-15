@@ -5,10 +5,14 @@ import { APP_NAME, OFFICIAL_NAV, ROUTES } from '@/lib/constants'
 import { useOfficialScroll } from '@/hooks/use-official-scroll'
 import { useScrolled } from '@/hooks/use-scrolled'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 
 export function OfficialNavbar() {
   const scrolled = useScrolled(8)
   const { scrollTo } = useOfficialScroll()
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const accessToken = useAuthStore((s) => s.accessToken)
+  const isLoggedIn = isAuthenticated || Boolean(accessToken)
 
   const handleAnchor = (href: string) => (e: React.MouseEvent) => {
     e.preventDefault()
@@ -42,10 +46,32 @@ export function OfficialNavbar() {
 
         <div className="flex items-center gap-2">
           <BrandThemeTrigger variant="official" />
-          <Link to={ROUTES.auth} className="ifly-btn-ghost hidden sm:inline">
+          {isLoggedIn && (
+            <>
+              <Link to={ROUTES.profile} className="ifly-nav-action ifly-nav-action-optional">
+                我的
+              </Link>
+              <Link to={ROUTES.app} className="ifly-nav-action ifly-nav-action-primary">
+                工作台
+              </Link>
+            </>
+          )}
+          <Link
+            to={ROUTES.auth}
+            className={cn(
+              'ifly-nav-action ifly-nav-action-optional',
+              isLoggedIn && 'ifly-nav-action-hidden',
+            )}
+          >
             登录
           </Link>
-          <Link to={ROUTES.authRegister} className="ifly-btn-primary text-sm">
+          <Link
+            to={ROUTES.authRegister}
+            className={cn(
+              'ifly-nav-action ifly-nav-action-primary',
+              isLoggedIn && 'ifly-nav-action-hidden',
+            )}
+          >
             免费体验
           </Link>
           <button

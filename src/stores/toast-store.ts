@@ -16,6 +16,13 @@ interface ToastState {
 
 const AUTO_DISMISS_MS = 4200
 
+function createToastId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export const useToastStore = create<ToastState>((set, get) => ({
   toasts: [],
 
@@ -23,7 +30,7 @@ export const useToastStore = create<ToastState>((set, get) => ({
     const text = message.trim()
     if (!text) return
 
-    const id = crypto.randomUUID()
+    const id = createToastId()
     set((state) => ({ toasts: [...state.toasts, { id, type, message: text }] }))
 
     window.setTimeout(() => {

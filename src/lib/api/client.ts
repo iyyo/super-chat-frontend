@@ -12,6 +12,7 @@ const AUTH_SKIP_REFRESH_PATHS = [
   '/auth/logout',
   '/auth/forgot-password',
   '/auth/reset-password',
+  '/share/',
 ]
 
 type RetryConfig = InternalAxiosRequestConfig & {
@@ -38,7 +39,7 @@ function notifyError(message: string, config?: RetryConfig) {
 function redirectToLogin() {
   localStorage.removeItem('access_token')
   const path = window.location.pathname
-  if (!path.startsWith('/auth') && !path.startsWith('/legal')) {
+  if (!path.startsWith('/auth') && !path.startsWith('/legal') && !path.startsWith('/share')) {
     toast.warning('登录状态已过期，请重新登录')
     window.location.href = '/auth'
   }
@@ -76,6 +77,9 @@ http.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
+  }
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type']
   }
   return config
 })
@@ -135,6 +139,8 @@ export const api = {
     request<T>({ ...config, method: 'POST', url, data: body }),
   put: <T>(url: string, body?: unknown, config?: AxiosRequestConfig) =>
     request<T>({ ...config, method: 'PUT', url, data: body }),
+  patch: <T>(url: string, body?: unknown, config?: AxiosRequestConfig) =>
+    request<T>({ ...config, method: 'PATCH', url, data: body }),
   delete: <T>(url: string, config?: AxiosRequestConfig) =>
     request<T>({ ...config, method: 'DELETE', url }),
 }

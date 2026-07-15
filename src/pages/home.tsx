@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Mic, Search, Subtitles, Upload } from 'lucide-react'
-import { ImportMediaModal } from '@/components/workspace/import-media-modal'
 import { WorkspaceActionCard } from '@/components/workspace/workspace-action-card'
 import {
   APP_ACTIONS,
+  ROUTES,
   WORKSPACE_ACTIONS,
-  WORKSPACE_RECENT_FILES,
 } from '@/lib/constants'
+import { useImportTaskStore } from '@/stores/import-task-store'
+import { useFilesStore, useRecentFiles } from '@/stores/files-store'
+import { useAuthStore } from '@/stores/auth-store'
 
 const ACTION_ICONS = {
   record: Mic,
@@ -23,14 +25,31 @@ function getGreeting() {
 }
 
 export function HomePage() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [importOpen, setImportOpen] = useState(false)
+  const setModalOpen = useImportTaskStore((s) => s.setModalOpen)
+  const fetchFiles = useFilesStore((s) => s.fetchFiles)
+  const filesLoaded = useFilesStore((s) => s.loaded)
+  const filesLoading = useFilesStore((s) => s.loading)
+  const recentFiles = useRecentFiles(5)
+  const { user, isAuthenticated } = useAuthStore()
+  const avatarInitial = (user?.nickname ?? user?.username ?? '?').charAt(0).toUpperCase()
 
   useEffect(() => {
-    if (searchParams.get('action') !== APP_ACTIONS.import) return
-    setImportOpen(true)
-    setSearchParams({}, { replace: true })
-  }, [searchParams, setSearchParams])
+    void fetchFiles()
+  }, [fetchFiles])
+
+  useEffect(() => {
+    if (searchParams.get('action') === APP_ACTIONS.import) {
+      setModalOpen(true)
+      setSearchParams({}, { replace: true })
+      return
+    }
+    if (searchParams.get('action') === APP_ACTIONS.record) {
+      setSearchParams({}, { replace: true })
+      navigate(ROUTES.record)
+    }
+  }, [searchParams, setSearchParams, setModalOpen, navigate])
 
   return (
     <>
@@ -44,7 +63,13 @@ export function HomePage() {
             <button type="button" className="workspace-home-tool-btn" aria-label="搜索">
               <Search className="h-4 w-4" />
             </button>
-            <div className="workspace-home-avatar" aria-hidden="true" />
+            <Link
+              to={ROUTES.profile}
+              className="workspace-home-avatar"
+              aria-label="个人中心"
+            >
+              {isAuthenticated ? avatarInitial : null}
+            </Link>
           </div>
         </header>
 
@@ -60,7 +85,7 @@ export function HomePage() {
                   title={action.title}
                   desc={action.desc}
                   icon={Icon}
-                  onClick={() => setImportOpen(true)}
+                  onClick={() => setModalOpen(true)}
                 />
               )
             }
@@ -79,34 +104,57 @@ export function HomePage() {
         </div>
 
         <section id="files" className="workspace-recent">
-          <h2 className="workspace-recent-title">最近文件</h2>
-          <ul className="workspace-recent-list">
-            {WORKSPACE_RECENT_FILES.map((file) => (
-              <li key={file.id}>
-                <button type="button" className="workspace-recent-item w-full text-left">
+          <div className="workspace-recent-head">
+            <h2 className="workspace-recent-title">最近文件</h2>
+            <Link to={ROUTES.files} className="workspace-recent-more">
+              查看全部
+            </Link>
+          </div>
+          {!filesLoaded && filesLoading ? (
+            <ul className="workspace-recent-list" aria-hidden>
+              {Array.from({ length: 3 }, (_, i) => (
+                <li key={i} className="workspace-recent-item workspace-recent-item--skeleton">
                   <div className="workspace-recent-main">
-                    <p className="workspace-recent-name">
-                      {file.live && <span className="workspace-recent-live" aria-hidden="true" />}
-                      {file.title}
-                    </p>
-                    {file.subtitle && (
-                      <p className="workspace-recent-subtitle">{file.subtitle}</p>
-                    )}
+                    <div className="workspace-recent-skeleton-line is-title" />
+                    <div className="workspace-recent-skeleton-line is-subtitle" />
                   </div>
                   <div className="workspace-recent-meta">
-                    <span>{file.duration}</span>
-                    <span>{file.date}</span>
-                    <span>{file.source}</span>
-                    {file.tag && <span className="workspace-recent-tag">{file.tag}</span>}
+                    <div className="workspace-recent-skeleton-line is-meta" />
                   </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+                </li>
+              ))}
+            </ul>
+          ) : recentFiles.length === 0 ? (
+            <p className="workspace-recent-empty">
+              暂无文件，
+              <button type="button" className="workspace-recent-import" onClick={() => setModalOpen(true)}>
+                去导入
+              </button>
+            </p>
+          ) : (
+            <ul className="workspace-recent-list">
+              {recentFiles.map((file) => (
+                <li key={file.id}>
+                  <Link to={ROUTES.fileDetail(file.id)} className="workspace-recent-item w-full text-left">
+                    <div className="workspace-recent-main">
+                      <p className="workspace-recent-name">{file.title}</p>
+                      <p className="workspace-recent-subtitle">
+                        {file.subtitle || '\u00a0'}
+                      </p>
+                    </div>
+                    <div className="workspace-recent-meta">
+                      <span>{file.duration}</span>
+                      <span>{file.date}</span>
+                      <span>{file.source}</span>
+                      {file.wordCount > 0 && <span>{file.wordCount} 字</span>}
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
-
-      <ImportMediaModal open={importOpen} onClose={() => setImportOpen(false)} />
     </>
   )
 }

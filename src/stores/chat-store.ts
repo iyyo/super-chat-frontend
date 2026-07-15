@@ -1,7 +1,12 @@
 import { create } from 'zustand'
 import { streamRequest } from '@/lib/api/stream'
 import { generateId } from '@/lib/utils'
-import type { ChatMessage, Conversation, SendMessagePayload } from '@/types/chat'
+import type {
+  ChatHistoryMessage,
+  ChatMessage,
+  Conversation,
+  SendMessagePayload,
+} from '@/types/chat'
 
 interface ChatState {
   conversations: Conversation[]
@@ -14,6 +19,7 @@ interface ChatState {
 }
 
 let abortController: AbortController | null = null
+let activeStream: { conversationId: string; messageId: string } | null = null
 
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
@@ -29,6 +35,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       title: '新对话',
       updatedAt: new Date().toISOString(),
       messages: [],
+      contextFileIds: [],
     }
     set((state) => ({
       conversations: [conversation, ...state.conversations],
@@ -37,7 +44,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return id
   },
 
-  sendMessage: async ({ conversationId, content, model }) => {
+  sendMessage: async ({ conversationId, content, model, attachments }) => {
     const state = get()
     let targetId = conversationId ?? state.activeConversationId
 
@@ -51,6 +58,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       content,
       status: 'done',
       createdAt: new Date().toISOString(),
+      attachments: attachments?.length ? attachments : undefined,
     }
 
     const assistantMessage: ChatMessage = {
@@ -60,6 +68,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       status: 'streaming',
       createdAt: new Date().toISOString(),
     }
+    const existingConversation = state.conversations.find((item) => item.id === targetId)
+    const history = buildRequestHistory(existingConversation)
+    const fileIds = [
+      ...new Set([
+        ...(existingConversation?.contextFileIds ?? []),
+        ...(attachments?.map((file) => file.id) ?? []),
+      ]),
+    ]
 
     set((s) => ({
       isStreaming: true,
@@ -67,14 +83,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
       conversations: upsertConversation(s.conversations, targetId!, userMessage, assistantMessage),
     }))
 
-    abortController = new AbortController()
+    const controller = new AbortController()
+    abortController = controller
+    activeStream = { conversationId: targetId, messageId: assistantMessage.id }
 
     try {
       await streamRequest(
         '/chat/stream',
-        { conversationId: targetId, content, model },
         {
-          signal: abortController.signal,
+          conversationId: targetId,
+          content,
+          model,
+          fileIds: fileIds.length ? fileIds : undefined,
+          history: history.length ? history : undefined,
+        },
+        {
+          signal: controller.signal,
           onChunk: (chunk) => {
             if (!chunk.content) return
             set((s) => ({
@@ -87,12 +111,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
             }))
           },
           onDone: () => {
+            if (controller.signal.aborted) return
+            abortController = null
+            activeStream = null
             set((s) => ({
               isStreaming: false,
               conversations: finalizeMessage(s.conversations, targetId!, assistantMessage.id),
             }))
           },
           onError: () => {
+            if (controller.signal.aborted) return
+            abortController = null
+            activeStream = null
             set((s) => ({
               isStreaming: false,
               conversations: markMessageError(s.conversations, targetId!, assistantMessage.id),
@@ -101,6 +131,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       )
     } catch {
+      if (controller.signal.aborted) return
+      abortController = null
+      activeStream = null
       set((s) => ({
         isStreaming: false,
         conversations: markMessageError(s.conversations, targetId!, assistantMessage.id),
@@ -111,9 +144,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
   abortStream: () => {
     abortController?.abort()
     abortController = null
-    set({ isStreaming: false })
+    const stream = activeStream
+    activeStream = null
+    set((state) => ({
+      isStreaming: false,
+      conversations: stream
+        ? stopMessage(state.conversations, stream.conversationId, stream.messageId)
+        : state.conversations,
+    }))
   },
 }))
+
+function buildRequestHistory(conversation?: Conversation): ChatHistoryMessage[] {
+  if (!conversation) return []
+  return conversation.messages
+    .filter(
+      (message): message is ChatMessage & { role: 'user' | 'assistant' } =>
+        (message.role === 'user' || message.role === 'assistant') &&
+        message.status === 'done' &&
+        Boolean(message.content.trim()),
+    )
+    .slice(-12)
+    .map(({ role, content }) => ({ role, content }))
+}
 
 function upsertConversation(
   conversations: Conversation[],
@@ -121,8 +174,12 @@ function upsertConversation(
   userMessage: ChatMessage,
   assistantMessage: ChatMessage,
 ): Conversation[] {
+  const attachmentIds = userMessage.attachments?.map((f) => f.id) ?? []
   const existing = conversations.find((c) => c.id === id)
   if (existing) {
+    const contextFileIds = [
+      ...new Set([...(existing.contextFileIds ?? []), ...attachmentIds]),
+    ]
     return conversations.map((c) =>
       c.id === id
         ? {
@@ -130,6 +187,7 @@ function upsertConversation(
             title: c.messages.length === 0 ? userMessage.content.slice(0, 20) : c.title,
             updatedAt: new Date().toISOString(),
             messages: [...c.messages, userMessage, assistantMessage],
+            contextFileIds,
           }
         : c,
     )
@@ -140,6 +198,7 @@ function upsertConversation(
       title: userMessage.content.slice(0, 20),
       updatedAt: new Date().toISOString(),
       messages: [userMessage, assistantMessage],
+      contextFileIds: attachmentIds,
     },
     ...conversations,
   ]
@@ -196,5 +255,28 @@ function markMessageError(
           ),
         }
       : c,
+  )
+}
+
+function stopMessage(
+  conversations: Conversation[],
+  conversationId: string,
+  messageId: string,
+): Conversation[] {
+  return conversations.map((conversation) =>
+    conversation.id === conversationId
+      ? {
+          ...conversation,
+          messages: conversation.messages.map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  status: 'stopped' as const,
+                  content: message.content,
+                }
+              : message,
+          ),
+        }
+      : conversation,
   )
 }

@@ -11,10 +11,14 @@ import { AuthLayout } from '@/pages/auth/layout'
 import { AuthLoginPage } from '@/pages/auth'
 import { ForgotPasswordPage } from '@/pages/auth/forgot-password'
 import { ManualTranscribePage } from '@/pages/manual-transcribe'
+import { RecordPage } from '@/pages/record'
 import { FilesPage } from '@/pages/files'
+import { FileDetailPage } from '@/pages/file-detail'
+import { ShareNotePage } from '@/pages/share'
 
 const routes = [
   { path: '/', element: <OfficialHomePage /> },
+  { path: '/share/:token', element: <ShareNotePage /> },
   {
     path: '/auth',
     element: <AuthLayout />,
@@ -31,11 +35,13 @@ const routes = [
     children: [
       { index: true, element: <HomePage /> },
       { path: 'files', element: <FilesPage /> },
+      { path: 'files/:fileId', element: <FileDetailPage /> },
       { path: 'chat', element: <ChatPage /> },
       { path: 'chat/:conversationId', element: <ChatPage /> },
       { path: 'explore', element: <ExplorePage /> },
       { path: 'profile', element: <ProfilePage /> },
       { path: 'manual', element: <ManualTranscribePage /> },
+      { path: 'record', element: <RecordPage /> },
     ],
   },
 ]

@@ -6,7 +6,6 @@ import {
   AuthBrandWaveform,
   AuthFormAmbient,
 } from '@/components/auth/auth-ambient'
-import { BrandThemeTrigger } from '@/components/theme/brand-theme-trigger'
 import { APP_NAME, HERO_STATS, ROUTES } from '@/lib/constants'
 import { useAuthStore } from '@/stores/auth-store'
 import '@/styles/auth.css'
@@ -83,7 +82,6 @@ export function AuthLayout() {
               <ArrowLeft className="h-4 w-4" aria-hidden="true" />
               {isForgot ? '返回登录' : '返回首页'}
             </Link>
-            <BrandThemeTrigger variant="official" />
           </div>
 
           <p className="auth-mobile-logo">

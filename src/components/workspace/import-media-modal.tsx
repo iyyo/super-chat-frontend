@@ -1,14 +1,29 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
+  CircleHelp,
   Crown,
-  FolderPlus,
   Info,
+  Loader2,
+  Mic,
+  Plus,
   ShieldCheck,
   X,
 } from 'lucide-react'
-import { IMPORT_AUDIO_LANGUAGES } from '@/lib/constants'
+import {
+  IMPORT_AUDIO_LANGUAGES,
+  IMPORT_PROFESSIONAL_DOMAINS,
+  IMPORT_SPEAKER_COUNTS,
+  ROUTES,
+} from '@/lib/constants'
+import { defaultImportChatDraft, jobToAttachment, type ChatLaunchState } from '@/lib/import-chat'
+import { useImportJob, useImportTaskStore, MAX_BATCH_FILES } from '@/stores/import-task-store'
 import { cn } from '@/lib/utils'
 
 interface ImportMediaModalProps {
@@ -16,24 +31,70 @@ interface ImportMediaModalProps {
   onClose: () => void
 }
 
+type ImportPanel = 'speaker' | 'domain' | null
+
 export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
+  const navigate = useNavigate()
+  const { setRecordsOpen, fetchJobHistory, setModalOpen } = useImportTaskStore()
   const titleId = useId()
   const overlayRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [language, setLanguage] = useState('zh-en')
   const [dragOver, setDragOver] = useState(false)
+  const [speakerCount, setSpeakerCount] = useState('auto')
+  const [domain, setDomain] = useState('general')
+  const [openPanel, setOpenPanel] = useState<ImportPanel>(null)
+  const [hotwordsExpanded, setHotwordsExpanded] = useState(false)
+  const [hotwordDraft, setHotwordDraft] = useState('')
+  const [hotwords, setHotwords] = useState<string[]>([])
+  const [fileError, setFileError] = useState<string | null>(null)
+  const {
+    phase,
+    session,
+    job,
+    errorMessage,
+    uploadProgress,
+    fileName,
+    startImport,
+    startBatchImport,
+    resumeUpload,
+    retryTranscribe,
+    reset,
+    minimize,
+    maxFileSize,
+    maxBatchFiles,
+    storedManifest,
+    batchTotal,
+    batchCurrent,
+    batchSucceeded,
+    batchFailed,
+  } = useImportJob()
+
+  const settingsLocked = phase !== 'idle' && phase !== 'error'
+
+  const speakerLabel =
+    IMPORT_SPEAKER_COUNTS.find((item) => item.id === speakerCount)?.label ?? '自动'
+  const domainLabel =
+    IMPORT_PROFESSIONAL_DOMAINS.find((item) => item.id === domain)?.label ?? '通用'
 
   useEffect(() => {
     if (!open) {
-      setSelectedFile(null)
-      setLanguage('zh-en')
       setDragOver(false)
+      setOpenPanel(null)
+      setHotwordsExpanded(false)
+      setHotwordDraft('')
+      setFileError(null)
       return
     }
 
+    void fetchJobHistory()
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        if (openPanel) setOpenPanel(null)
+        else onClose()
+      }
     }
     document.addEventListener('keydown', onKeyDown)
     document.body.style.overflow = 'hidden'
@@ -41,23 +102,327 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
       document.removeEventListener('keydown', onKeyDown)
       document.body.style.overflow = ''
     }
-  }, [open, onClose])
+  }, [open, onClose, openPanel, fetchJobHistory])
+
+  useEffect(() => {
+    if (!openPanel) return
+
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (target.closest('.import-setting-row-wrap')) return
+      setOpenPanel(null)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [openPanel])
 
   if (!open) return null
 
-  const pickFile = (file: File | null) => {
-    if (!file) return
-    setSelectedFile(file)
+  const pickFiles = (incoming: FileList | File[] | null) => {
+    if (!incoming || settingsLocked) return
+    const arr = Array.from(incoming)
+    const oversize: string[] = []
+    setSelectedFiles((prev) => {
+      const merged = [...prev]
+      for (const file of arr) {
+        if (merged.length >= maxBatchFiles) break
+        if (file.size > maxFileSize) {
+          oversize.push(file.name)
+          continue
+        }
+        if (merged.some((f) => f.name === file.name && f.size === file.size)) continue
+        merged.push(file)
+      }
+      return merged
+    })
+    if (oversize.length > 0) {
+      setFileError(`${oversize[0]} 超过 500MB 上限，已跳过`)
+    } else {
+      setFileError(null)
+    }
+  }
+
+  const removeFile = (index: number) => {
+    if (settingsLocked) return
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+    setFileError(null)
+  }
+
+  const activeFile =
+    selectedFiles.find((f) => f.name === storedManifest?.fileName) ?? selectedFiles[0] ?? null
+
+  const batchLabel =
+    batchTotal > 1 ? `（${batchCurrent}/${batchTotal}）` : ''
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const handleSubmit = () => {
+    if (selectedFiles.length === 0 || fileError) return
+    const settings = { language, domain, speakerCount, hotwords }
+    if (selectedFiles.length === 1) {
+      void startImport(selectedFiles[0]!, settings)
+    } else {
+      void startBatchImport(selectedFiles, settings)
+    }
+  }
+
+  const handleClose = () => {
+    if (phase === 'uploading' || phase === 'upload_paused' || phase === 'transcribing') {
+      if (!window.confirm('任务将在后台继续，确定关闭弹窗吗？')) return
+      minimize()
+      onClose()
+      return
+    }
+    onClose()
+  }
+
+  const renderLeftPanel = () => {
+    if (phase === 'uploading' || phase === 'upload_paused') {
+      const uploaded = session?.uploadedChunks.length ?? 0
+      const total = session?.totalChunks ?? 0
+      return (
+        <div className="import-progress-panel">
+          <p className="import-progress-filename">
+            {batchLabel}
+            {fileName ?? '文件'}
+          </p>
+          <p className="import-progress-meta">
+            {session ? formatSize(session.fileSize) : ''} · 分片 {uploaded}/{total}
+          </p>
+          <div className="import-progress-bar-wrap">
+            <div
+              className={cn(
+                'import-progress-bar',
+                phase === 'upload_paused' && 'is-paused',
+              )}
+              style={{ width: `${uploadProgress}%` }}
+            />
+          </div>
+          <p className="import-progress-percent">{uploadProgress}%</p>
+          {phase === 'upload_paused' ? (
+            <div className="import-progress-alert">
+              <AlertTriangle className="h-4 w-4" />
+              <span>{errorMessage}</span>
+              <button
+                type="button"
+                className="import-progress-retry"
+                onClick={() => activeFile && void resumeUpload(activeFile)}
+              >
+                立即重试
+              </button>
+            </div>
+          ) : (
+            <p className="import-progress-hint">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              正在上传…支持断点续传
+            </p>
+          )}
+        </div>
+      )
+    }
+
+    if (phase === 'transcribing') {
+      const preparingMedia = job?.status === 'queued' || job?.status === 'uploading_to_xfyun'
+      return (
+        <div className="import-progress-panel">
+          <p className="import-progress-filename">
+            {batchLabel}
+            {fileName ?? '文件'}
+          </p>
+          <p className="import-progress-meta">✓ 上传完成</p>
+          <div className="import-progress-bar-wrap">
+            <div className="import-progress-bar is-done" style={{ width: '100%' }} />
+          </div>
+          <p className="import-progress-hint is-transcribing">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            {preparingMedia ? '正在处理音轨并提交转写…' : 'IFASR 大模型转写中…'}
+          </p>
+          <ul className="import-pipeline">
+            <li className="is-done">✓ 文件校验</li>
+            <li className="is-done">✓ 分片上传完成</li>
+            <li className="is-active">
+              {preparingMedia ? '◉ 媒体预处理' : '◉ 语音识别 (IFASR)'}
+            </li>
+            <li>○ 写入文件库</li>
+          </ul>
+        </div>
+      )
+    }
+
+    if (phase === 'success') {
+      return (
+        <div className="import-progress-panel is-success">
+          <span className="import-success-icon" aria-hidden="true">
+            <Check className="h-10 w-10" />
+          </span>
+          <p className="import-progress-filename">
+            {batchTotal > 1
+              ? `已完成 ${batchSucceeded} 个文件`
+              : job?.status === 'completed'
+                ? '转写完成'
+                : '内容已生成，可查看'}
+          </p>
+          <p className="import-progress-meta">
+            {batchTotal > 1
+              ? batchFailed > 0
+                ? `成功 ${batchSucceeded} 个，失败 ${batchFailed} 个`
+                : `共 ${batchTotal} 个文件已加入文件库`
+              : job?.fileName}
+          </p>
+          {batchTotal <= 1 && job?.resultText && (
+            <p className="import-result-preview">{job.resultText.slice(0, 120)}…</p>
+          )}
+          {(batchTotal > 1 || job?.workspaceFileId) && (
+            <div className="import-success-actions">
+              {batchTotal > 1 ? (
+                <button
+                  type="button"
+                  className="import-success-link is-primary"
+                  onClick={() => {
+                    setModalOpen(false)
+                    onClose()
+                    navigate(ROUTES.files)
+                  }}
+                >
+                  查看文件库 →
+                </button>
+              ) : (
+                <>
+              <button
+                type="button"
+                className="import-success-link"
+                onClick={() => {
+                  setModalOpen(false)
+                  onClose()
+                    navigate(ROUTES.fileDetail(job!.workspaceFileId!))
+                }}
+              >
+                查看文件 →
+              </button>
+              <button
+                type="button"
+                className="import-success-link is-primary"
+                onClick={() => {
+                  const attachment = jobToAttachment(job!)
+                  if (!attachment) return
+                  const state: ChatLaunchState = {
+                    attachments: [attachment],
+                    draft: defaultImportChatDraft(),
+                  }
+                  setModalOpen(false)
+                  onClose()
+                  navigate(ROUTES.chat, { state })
+                }}
+              >
+                用此文件开始 Chat
+              </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    if (phase === 'error') {
+      return (
+        <div className="import-progress-panel is-error">
+          <AlertTriangle className="h-8 w-8" />
+          <p className="import-progress-filename">导入失败</p>
+          <p className="import-progress-meta">{errorMessage}</p>
+          {job?.canRetryTranscribe && (
+            <button type="button" className="import-progress-retry" onClick={() => void retryTranscribe()}>
+              重新转写
+            </button>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="audio/*,video/*"
+          multiple
+          className="sr-only"
+          onChange={onFileChange}
+        />
+        <button
+          type="button"
+          className="import-dropzone-trigger import-dropzone-trigger-compact"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <span className="import-dropzone-icon import-dropzone-icon-sm" aria-hidden="true">
+            <Plus className="h-6 w-6" strokeWidth={1.5} />
+          </span>
+          <span className="import-dropzone-title">选择/拖动音视频文件到这里</span>
+          <span className="import-dropzone-hint">
+            或 <span className="import-dropzone-link">微信扫码导入</span> 手机文件
+          </span>
+        </button>
+
+        {selectedFiles.length > 0 && (
+          <ul className="import-file-list">
+            {selectedFiles.map((file, index) => (
+              <li key={`${file.name}-${file.size}-${index}`} className="import-file-item">
+                <Mic className="import-file-item-icon h-4 w-4" aria-hidden="true" />
+                <div className="import-file-item-main">
+                  <span className="import-file-item-name">{file.name}</span>
+                  <span className="import-file-item-size">{formatSize(file.size)}</span>
+                </div>
+                <button
+                  type="button"
+                  className="import-file-item-remove"
+                  aria-label={`移除 ${file.name}`}
+                  onClick={() => removeFile(index)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {fileError && <p className="import-file-error">{fileError}</p>}
+        {storedManifest && selectedFiles.length === 0 && (
+          <p className="import-resume-hint">检测到未完成上传：{storedManifest.fileName}，请重新选择同一文件以续传</p>
+        )}
+        <p className="import-file-count">
+          共 ({selectedFiles.length}/{MAX_BATCH_FILES}) 个文件
+        </p>
+        <p className="import-dropzone-safe">
+          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+          数据安全保护 · 单文件最大 500MB
+        </p>
+      </>
+    )
   }
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    pickFile(e.target.files?.[0] ?? null)
+    pickFiles(e.target.files)
+    e.target.value = ''
   }
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
-    pickFile(e.dataTransfer.files?.[0] ?? null)
+    pickFiles(e.dataTransfer.files)
+  }
+
+  const togglePanel = (panel: Exclude<ImportPanel, null>) => {
+    setOpenPanel((current) => (current === panel ? null : panel))
+  }
+
+  const addHotword = () => {
+    const word = hotwordDraft.trim()
+    if (!word || hotwords.includes(word)) return
+    setHotwords((prev) => [...prev, word])
+    setHotwordDraft('')
   }
 
   return createPortal(
@@ -78,7 +443,13 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
         <header className="import-modal-header">
           <div className="import-modal-header-main">
             <h2 id={titleId} className="import-modal-title">
-              导入音视频文件
+              {phase === 'success'
+                ? '导入完成'
+                : phase === 'transcribing'
+                  ? '转写中'
+                  : phase === 'uploading' || phase === 'upload_paused'
+                    ? '上传中'
+                    : '导入音视频文件'}
             </h2>
             <button type="button" className="import-modal-legacy-link">
               找不到功能？使用旧版
@@ -87,7 +458,7 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
           <button
             type="button"
             className="import-modal-close"
-            onClick={onClose}
+            onClick={handleClose}
             aria-label="关闭"
           >
             <X className="h-5 w-5" />
@@ -96,50 +467,24 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
 
         <div className="import-modal-body">
           <div
-            className={cn('import-dropzone', dragOver && 'is-dragover', selectedFile && 'has-file')}
+            className={cn(
+              'import-dropzone',
+              dragOver && 'is-dragover',
+              selectedFiles.length > 0 && 'has-file',
+              settingsLocked && 'is-locked',
+            )}
             onDragOver={(e) => {
+              if (settingsLocked) return
               e.preventDefault()
               setDragOver(true)
             }}
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
           >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="audio/*,video/*"
-              className="sr-only"
-              onChange={onFileChange}
-            />
-            <button
-              type="button"
-              className="import-dropzone-trigger"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <span className="import-dropzone-icon" aria-hidden="true">
-                <FolderPlus className="h-7 w-7" strokeWidth={1.5} />
-              </span>
-              {selectedFile ? (
-                <>
-                  <span className="import-dropzone-title">{selectedFile.name}</span>
-                  <span className="import-dropzone-hint">点击重新选择文件</span>
-                </>
-              ) : (
-                <>
-                  <span className="import-dropzone-title">选择/拖动音视频文件到这里</span>
-                  <span className="import-dropzone-hint">
-                    或 <button type="button" className="import-dropzone-link">微信扫码导入</button> 手机文件
-                  </span>
-                </>
-              )}
-            </button>
-            <p className="import-dropzone-safe">
-              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-              数据安全保护 · 准确率最高 98% · 音视频格式支持
-            </p>
+            {renderLeftPanel()}
           </div>
 
-          <aside className="import-modal-settings">
+          <aside className={cn('import-modal-settings', settingsLocked && 'is-locked')}>
             <div className="import-setting-block">
               <p className="import-setting-label">音频语言</p>
               <div className="import-lang-grid">
@@ -153,8 +498,10 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
                       'more' in item && item.more && 'import-lang-btn-more',
                     )}
                     onClick={() => {
-                      if (!('more' in item) || !item.more) setLanguage(item.id)
+                      if (settingsLocked || ('more' in item && item.more)) return
+                      setLanguage(item.id)
                     }}
+                    disabled={settingsLocked}
                   >
                     {item.premium && <Crown className="import-lang-premium h-3 w-3" />}
                     <span>{item.label}</span>
@@ -168,48 +515,242 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
 
             <div className="import-setting-block">
               <p className="import-setting-label">说话人</p>
-              <button type="button" className="import-setting-row">
-                <span>指定说话人数量</span>
-                <span className="import-setting-value">
-                  自动
-                  <ChevronRight className="h-4 w-4" />
-                </span>
-              </button>
+              <div className="import-setting-row-wrap">
+                <button
+                  type="button"
+                  className={cn('import-setting-row', openPanel === 'speaker' && 'is-open')}
+                  onClick={() => !settingsLocked && togglePanel('speaker')}
+                  disabled={settingsLocked}
+                  aria-expanded={openPanel === 'speaker'}
+                >
+                  <span>指定说话人数量</span>
+                  <span className="import-setting-value">
+                    {speakerLabel}
+                    <ChevronRight className="h-4 w-4" />
+                  </span>
+                </button>
+                {openPanel === 'speaker' && (
+                  <div className="import-setting-popover import-speaker-popover" role="listbox">
+                    {IMPORT_SPEAKER_COUNTS.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        role="option"
+                        aria-selected={speakerCount === item.id}
+                        className={cn(
+                          'import-popover-option',
+                          speakerCount === item.id && 'is-active',
+                        )}
+                        onClick={() => {
+                          setSpeakerCount(item.id)
+                          setOpenPanel(null)
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="import-setting-block">
-              <p className="import-setting-label">优化转写</p>
-              <button type="button" className="import-setting-row">
-                <span>专业领域</span>
-                <span className="import-setting-value">
-                  通用
-                  <ChevronRight className="h-4 w-4" />
-                </span>
-              </button>
-              <button type="button" className="import-setting-row">
-                <span>热词优化</span>
-                <span className="import-setting-value">
-                  展开
-                  <ChevronRight className="h-4 w-4" />
-                </span>
-              </button>
+              <p className="import-setting-label-row">
+                <span>优化转写</span>
+                <button
+                  type="button"
+                  className="import-setting-help"
+                  aria-label="优化转写说明"
+                  title="选择专业领域并添加热词，可提升转写准确率"
+                >
+                  <CircleHelp className="h-3.5 w-3.5" />
+                </button>
+              </p>
+
+              <div className="import-setting-row-wrap">
+                <button
+                  type="button"
+                  className={cn('import-setting-row', openPanel === 'domain' && 'is-open')}
+                  onClick={() => !settingsLocked && togglePanel('domain')}
+                  disabled={settingsLocked}
+                  aria-expanded={openPanel === 'domain'}
+                >
+                  <span>专业领域</span>
+                  <span className="import-setting-value">
+                    {domainLabel}
+                    <ChevronRight className="h-4 w-4" />
+                  </span>
+                </button>
+                {openPanel === 'domain' && (
+                  <div className="import-setting-popover import-domain-popover" role="listbox">
+                    <div className="import-domain-grid">
+                      {IMPORT_PROFESSIONAL_DOMAINS.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          role="option"
+                          aria-selected={domain === item.id}
+                          className={cn(
+                            'import-domain-option',
+                            domain === item.id && 'is-active',
+                          )}
+                          onClick={() => {
+                            setDomain(item.id)
+                            setOpenPanel(null)
+                          }}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="import-hotword-block">
+                <button
+                  type="button"
+                  className="import-setting-row import-hotword-toggle"
+                  onClick={() => !settingsLocked && setHotwordsExpanded((v) => !v)}
+                  disabled={settingsLocked}
+                  aria-expanded={hotwordsExpanded}
+                >
+                  <span>热词优化</span>
+                  <span className="import-setting-value">
+                    {hotwordsExpanded ? '收起' : '展开'}
+                    {hotwordsExpanded ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </span>
+                </button>
+                {hotwordsExpanded && (
+                  <div className="import-hotword-panel">
+                    <div className="import-hotword-input-wrap">
+                      <input
+                        type="text"
+                        className="import-hotword-input"
+                        placeholder="输入音频热词可提高准确率"
+                        value={hotwordDraft}
+                        onChange={(e) => setHotwordDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            addHotword()
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="import-hotword-add"
+                        aria-label="添加热词"
+                        onClick={addHotword}
+                        disabled={!hotwordDraft.trim()}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {hotwords.length > 0 && (
+                      <div className="import-hotword-tags">
+                        {hotwords.map((word) => (
+                          <span key={word} className="import-hotword-tag">
+                            {word}
+                            <button
+                              type="button"
+                              className="import-hotword-tag-remove"
+                              aria-label={`删除热词 ${word}`}
+                              onClick={() =>
+                                setHotwords((prev) => prev.filter((w) => w !== word))
+                              }
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </aside>
         </div>
 
         <footer className="import-modal-footer">
-          <button type="button" className="import-modal-records">
+          <button
+            type="button"
+            className="import-modal-records"
+            onClick={() => setRecordsOpen(true)}
+          >
             <Info className="h-4 w-4" />
             导入记录
           </button>
-          <button
-            type="button"
-            className="import-modal-submit"
-            disabled={!selectedFile}
-            onClick={onClose}
-          >
-            提交
-          </button>
+          <div className="import-modal-footer-actions">
+            {phase === 'success' && (
+              <button
+                type="button"
+                className="import-modal-secondary"
+                onClick={() => {
+                  reset()
+                  setSelectedFiles([])
+                  setLanguage('zh-en')
+                  setSpeakerCount('auto')
+                  setDomain('general')
+                  setHotwords([])
+                }}
+              >
+                继续导入
+              </button>
+            )}
+            <button
+              type="button"
+              className="import-modal-submit"
+              disabled={
+                phase === 'idle'
+                  ? selectedFiles.length === 0 || !!fileError
+                  : phase === 'upload_paused'
+              }
+              onClick={() => {
+                if (phase === 'success') {
+                  if (batchTotal > 1) {
+                    setModalOpen(false)
+                    onClose()
+                    navigate(ROUTES.files)
+                    return
+                  }
+                  if (job?.workspaceFileId) {
+                    setModalOpen(false)
+                    onClose()
+                    navigate(ROUTES.fileDetail(job.workspaceFileId!))
+                  }
+                  return
+                }
+                if (phase === 'idle') {
+                  handleSubmit()
+                  return
+                }
+                if (phase === 'upload_paused' && activeFile) {
+                  void resumeUpload(activeFile)
+                  return
+                }
+                if (phase === 'transcribing' || phase === 'uploading') {
+                  minimize()
+                  onClose()
+                }
+              }}
+            >
+              {phase === 'success'
+                ? batchTotal > 1
+                  ? '查看文件库'
+                  : '查看文件'
+                : phase === 'upload_paused'
+                  ? '继续上传'
+                  : phase === 'transcribing' || phase === 'uploading'
+                    ? '后台继续'
+                    : '提交'}
+            </button>
+          </div>
         </footer>
       </div>
     </div>,

@@ -9,6 +9,7 @@ interface ChatListProps {
   emptyHint?: string
   className?: string
   variant?: 'app' | 'workspace'
+  insertFileId?: string | null
 }
 
 export function ChatList({
@@ -16,12 +17,35 @@ export function ChatList({
   emptyHint = '开始一段新对话吧',
   className,
   variant = 'app',
+  insertFileId,
 }: ChatListProps) {
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const prevLengthRef = useRef(messages.length)
+  const prevContentLenRef = useRef(0)
+
+  const lastMessage = messages[messages.length - 1]
+  const lastContentLen = lastMessage?.content.length ?? 0
+  const isStreaming = lastMessage?.status === 'streaming'
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    const container = containerRef.current
+    if (!container || messages.length === 0) return
+
+    const isNewMessage = messages.length !== prevLengthRef.current
+    prevLengthRef.current = messages.length
+
+    const contentGrew = lastContentLen !== prevContentLenRef.current
+    prevContentLenRef.current = lastContentLen
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight
+    const stickToBottom = isNewMessage || distanceFromBottom < 120
+
+    if (!stickToBottom) return
+    if (!isNewMessage && isStreaming && !contentGrew) return
+
+    container.scrollTop = container.scrollHeight
+  }, [messages.length, lastContentLen, isStreaming])
 
   if (messages.length === 0) {
     return (
@@ -33,6 +57,7 @@ export function ChatList({
 
   return (
     <div
+      ref={containerRef}
       className={cn(
         variant === 'workspace'
           ? 'workspace-chat-thread'
@@ -41,9 +66,13 @@ export function ChatList({
       )}
     >
       {messages.map((message) => (
-        <ChatMessage key={message.id} message={message} variant={variant} />
+        <ChatMessage
+          key={message.id}
+          message={message}
+          variant={variant}
+          insertFileId={insertFileId}
+        />
       ))}
-      <div ref={bottomRef} />
     </div>
   )
 }
