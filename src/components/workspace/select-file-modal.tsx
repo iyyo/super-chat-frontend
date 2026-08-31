@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, ShieldCheck, X } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { APP_NAME } from '@/lib/constants'
 import type { WorkspaceFileDto } from '@/lib/api/files'
 import { useDisplayFiles, useFilesStore } from '@/stores/files-store'
@@ -160,25 +161,26 @@ export function SelectFileModal({
             </thead>
             <tbody>
               {filteredFiles.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="select-file-empty">
-                    {query ? (
-                      '没有匹配的文件'
-                    ) : (
-                      <span className="select-file-empty-cta">
-                        暂无文件，
-                        <button
-                          type="button"
-                          className="select-file-import-link"
-                          onClick={() => {
-                            onClose()
-                            setModalOpen(true)
-                          }}
-                        >
-                          去导入音视频
-                        </button>
-                      </span>
-                    )}
+                <tr className="select-file-empty-row">
+                  <td colSpan={5} className="select-file-empty-cell">
+                    <EmptyState
+                      compact
+                      title={query ? '没有找到匹配文件' : '这里还没有文件'}
+                      description={
+                        query
+                          ? '试试其他关键词，或清空搜索后查看全部文件'
+                          : '导入音视频后，就可以在这里选择文件'
+                      }
+                      actionLabel={query ? undefined : '导入音视频'}
+                      onAction={
+                        query
+                          ? undefined
+                          : () => {
+                              onClose()
+                              setModalOpen(true)
+                            }
+                      }
+                    />
                   </td>
                 </tr>
               ) : (

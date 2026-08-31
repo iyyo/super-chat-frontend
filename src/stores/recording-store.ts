@@ -2,8 +2,11 @@ import { create } from 'zustand'
 import { useFilesStore } from '@/stores/files-store'
 import { getRecordingEngine } from '@/lib/rtasr/recording-engine'
 import type { LiveSegment, RecordingMarker, RecordingPhase } from '@/lib/rtasr/recording-engine'
-import type { FinishRecordingResult } from '@/lib/api/rtasr'
-import type { RecordingRecoverySnapshot } from '@/lib/rtasr/recording-recovery'
+import type {
+  FinishRecordingResult,
+  RtAsrLiveSession,
+  RtAsrProvider,
+} from '@/lib/api/rtasr'
 import type { AudioInputDevice } from '@/lib/rtasr/audio-capture'
 
 interface RecordingStoreState {
@@ -21,19 +24,27 @@ interface RecordingStoreState {
   errorMessage: string | null
   level: number
   domain: string
+  provider: RtAsrProvider
   deviceId: string | null
   featureIds: string[]
   renewNotice: string | null
+  reconnectAttempt: number
+  reconnectStartedAt: number | null
+  autoFinishResult: FinishRecordingResult | null
+  saveQueuePending: boolean
   syncFromEngine: () => void
   start: (title?: string) => Promise<void>
-  resumeLive: (snapshot: RecordingRecoverySnapshot) => Promise<void>
+  resumeLive: (live: RtAsrLiveSession) => Promise<void>
   pause: () => void
   resume: () => Promise<void>
   minimize: () => void
   expand: () => void
   stopAndSave: () => Promise<FinishRecordingResult | null>
+  clearAutoFinishResult: () => void
+  setSaveQueuePending: (pending: boolean) => void
   setTitle: (title: string) => void
   setDomain: (domain: string) => void
+  setProvider: (provider: RtAsrProvider) => void
   setDeviceId: (deviceId: string | null) => void
   setFeatureIds: (ids: string[]) => void
   renameSpeaker: (rl: number, name: string) => void
@@ -63,9 +74,14 @@ function pullEngineState() {
     errorMessage: s.errorMessage,
     level: s.level,
     domain: s.domain,
+    provider: s.provider,
     deviceId: s.deviceId,
     featureIds: s.featureIds,
     renewNotice: s.renewNotice,
+    reconnectAttempt: s.reconnectAttempt,
+    reconnectStartedAt: s.reconnectStartedAt,
+    autoFinishResult: s.autoFinishResult,
+    saveQueuePending: s.saveQueuePending,
   }
 }
 
@@ -83,8 +99,8 @@ export const useRecordingStore = create<RecordingStoreState>((set) => ({
     set(pullEngineState())
   },
 
-  resumeLive: async (snapshot) => {
-    await engine.resumeLive(snapshot)
+  resumeLive: async (live) => {
+    await engine.resumeLive(live)
     set(pullEngineState())
   },
 
@@ -115,6 +131,16 @@ export const useRecordingStore = create<RecordingStoreState>((set) => ({
     return result
   },
 
+  clearAutoFinishResult: () => {
+    engine.clearAutoFinishResult()
+    set(pullEngineState())
+  },
+
+  setSaveQueuePending: (pending) => {
+    engine.setSaveQueuePending(pending)
+    set(pullEngineState())
+  },
+
   setTitle: (title) => {
     engine.setTitle(title)
     set(pullEngineState())
@@ -122,6 +148,11 @@ export const useRecordingStore = create<RecordingStoreState>((set) => ({
 
   setDomain: (domain) => {
     engine.setDomain(domain)
+    set(pullEngineState())
+  },
+
+  setProvider: (provider) => {
+    engine.setProvider(provider)
     set(pullEngineState())
   },
 
@@ -164,5 +195,10 @@ export const useRecordingStore = create<RecordingStoreState>((set) => ({
 
 export function useRecordingActive() {
   const phase = useRecordingStore((s) => s.phase)
-  return phase === 'recording' || phase === 'paused' || phase === 'connecting'
+  return (
+    phase === 'recording' ||
+    phase === 'reconnecting' ||
+    phase === 'paused' ||
+    phase === 'connecting'
+  )
 }

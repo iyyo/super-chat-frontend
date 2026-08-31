@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { AUTH_STORAGE_KEY } from '@/lib/constants'
 import { authApi } from '@/lib/api/auth'
 import type { AuthUser, LoginPayload, LoginWithEmailPayload, RegisterPayload } from '@/types/auth'
 
@@ -73,7 +74,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: 'iyy-auth',
+      name: AUTH_STORAGE_KEY,
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,

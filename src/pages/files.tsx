@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { FileText, Loader2, Search, Star } from 'lucide-react'
+import { Loader2, Search } from 'lucide-react'
 import type { WorkspaceFileDto } from '@/lib/api/files'
 import {
   isTranscribeDetailReady,
@@ -10,7 +10,8 @@ import {
 } from '@/lib/api/transcribe'
 import { WORKSPACE_FILE_TABS, ROUTES } from '@/lib/constants'
 import { useDisplayFiles, useFilesStore, useFilesSummaryPolling } from '@/stores/files-store'
-import { FileSummaryPreview } from '@/components/workspace/file-summary-preview'
+import { FileTimeline } from '@/components/workspace/file-timeline'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useImportTaskStore } from '@/stores/import-task-store'
 import { useImportJobs } from '@/hooks/use-import-jobs'
 import { cn } from '@/lib/utils'
@@ -44,6 +45,8 @@ export function FilesPage() {
   const initialTab =
     tabParam === 'imports' ? 'imports' : (WORKSPACE_FILE_TABS[0].id as typeof WORKSPACE_FILE_TABS[number]['id'])
   const [activeTab, setActiveTab] = useState(initialTab)
+  const [query, setQuery] = useState(() => searchParams.get('q') ?? '')
+  const [searchOpen, setSearchOpen] = useState(() => Boolean(searchParams.get('q')))
   const { importJobs, jobsLoading, refreshJobs } = useImportJobs(activeTab === 'imports')
 
   const fetchFiles = useFilesStore((s) => s.fetchFiles)
@@ -58,6 +61,23 @@ export function FilesPage() {
     star: starredFiles.length,
     trash: 0,
   } as const
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const filteredMine = useMemo(() => {
+    if (!normalizedQuery) return allFiles
+    return allFiles.filter((f) => {
+      const hay = `${f.title} ${f.subtitle ?? ''} ${f.summaryPreview?.join(' ') ?? ''}`.toLowerCase()
+      return hay.includes(normalizedQuery)
+    })
+  }, [allFiles, normalizedQuery])
+  const filteredStar = useMemo(() => {
+    if (!normalizedQuery) return starredFiles
+    return starredFiles.filter((f) => {
+      const hay = `${f.title} ${f.subtitle ?? ''} ${f.summaryPreview?.join(' ') ?? ''}`.toLowerCase()
+      return hay.includes(normalizedQuery)
+    })
+  }, [starredFiles, normalizedQuery])
+
   useEffect(() => {
     void fetchFiles()
   }, [fetchFiles])
@@ -66,21 +86,41 @@ export function FilesPage() {
     if (tabParam === 'imports') setActiveTab('imports')
   }, [tabParam])
 
+  useEffect(() => {
+    const q = searchParams.get('q')
+    if (q) {
+      setQuery(q)
+      setSearchOpen(true)
+    }
+  }, [searchParams])
 
   const onTabChange = (id: (typeof WORKSPACE_FILE_TABS)[number]['id']) => {
     setActiveTab(id)
-    if (id === 'imports') {
-      setSearchParams({ tab: 'imports' })
-    } else {
-      setSearchParams({})
-    }
+    const next = new URLSearchParams()
+    if (id === 'imports') next.set('tab', 'imports')
+    if (query.trim()) next.set('q', query.trim())
+    setSearchParams(next)
+  }
+
+  const syncQueryToUrl = (value: string) => {
+    setQuery(value)
+    const next = new URLSearchParams(searchParams)
+    if (value.trim()) next.set('q', value.trim())
+    else next.delete('q')
+    if (activeTab === 'imports') next.set('tab', 'imports')
+    setSearchParams(next, { replace: true })
   }
 
   const openFile = (file: WorkspaceFileDto) => {
     navigate(ROUTES.fileDetail(file.id))
   }
 
-  const renderFileList = (files: WorkspaceFileDto[], emptyText: string, showImportCta = false) => {
+  const renderFileList = (
+    files: WorkspaceFileDto[],
+    emptyTitle: string,
+    emptyDescription: string,
+    showImportCta = false,
+  ) => {
     if (filesLoading) {
       return (
         <p className="files-loading">
@@ -91,65 +131,53 @@ export function FilesPage() {
     }
     if (files.length === 0) {
       return (
-        <div className="files-empty">
-          <p>{emptyText}</p>
-          {showImportCta && (
-            <button type="button" className="files-import-new-cta" onClick={() => setModalOpen(true)}>
-              去导入音视频
-            </button>
-          )}
-        </div>
+        <EmptyState
+          title={emptyTitle}
+          description={emptyDescription}
+          actionLabel={showImportCta ? '导入音视频' : undefined}
+          onAction={showImportCta ? () => setModalOpen(true) : undefined}
+        />
       )
     }
-    return (
-      <ul className="workspace-recent-list files-list">
-        {files.map((file) => (
-          <li key={file.id}>
-            <button
-              type="button"
-              className="workspace-recent-item files-row w-full text-left"
-              onClick={() => openFile(file)}
-            >
-              <span className="files-row-icon" aria-hidden="true">
-                <FileText className="h-4 w-4" />
-              </span>
-              <div className="workspace-recent-main">
-                <p className="workspace-recent-name">
-                  {file.starred && (
-                    <Star className="files-item-star" fill="currentColor" aria-hidden />
-                  )}
-                  {file.title}
-                </p>
-                <FileSummaryPreview
-                  subtitle={file.subtitle}
-                  summaryPreview={file.summaryPreview}
-                  summaryStatus={file.summaryStatus}
-                />
-              </div>
-              <div className="workspace-recent-meta">
-                <span>{file.duration}</span>
-                <span>{file.date}</span>
-                <span>{file.source}</span>
-                {file.wordCount > 0 && <span>{file.wordCount} 字</span>}
-              </div>
-            </button>
-          </li>
-        ))}
-      </ul>
-    )
+    return <FileTimeline files={files} onOpen={openFile} />
   }
 
   return (
     <div className="workspace-home files-page">
       <header className="files-page-head">
-        <div>
+        <div className="files-page-copy">
+          <p className="files-page-eyebrow">内容库</p>
           <h1 className="files-page-title">文件</h1>
-          <p className="files-page-subtitle">录音、导入和收藏内容集中管理</p>
+          <p className="files-page-subtitle">录音、导入与收藏，集中整理可检索的知识资产</p>
         </div>
         <div className="files-head-actions">
-          <button type="button" className="files-search-btn" aria-label="搜索文件">
-            <Search className="h-4 w-4" />
-          </button>
+          {searchOpen ? (
+            <div className="files-search-field">
+              <Search className="h-4 w-4 shrink-0" aria-hidden />
+              <input
+                type="search"
+                autoFocus
+                value={query}
+                placeholder="搜索标题 / 摘要"
+                onChange={(e) => syncQueryToUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setSearchOpen(false)
+                    syncQueryToUrl('')
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="files-search-btn"
+              aria-label="搜索文件"
+              onClick={() => setSearchOpen(true)}
+            >
+              <Search className="h-4 w-4" />
+            </button>
+          )}
           <button type="button" className="files-import-new" onClick={() => setModalOpen(true)}>
             新建导入
           </button>
@@ -175,9 +203,18 @@ export function FilesPage() {
       </div>
 
       {activeTab === 'mine' ? (
-        renderFileList(allFiles, '暂无文件，导入音视频后将出现在这里', true)
+        renderFileList(
+          filteredMine,
+          normalizedQuery ? '没有匹配的文件' : '这里还没有文件',
+          normalizedQuery ? '试试换个关键词' : '导入音视频后，文件会出现在这里',
+          !normalizedQuery,
+        )
       ) : activeTab === 'star' ? (
-        renderFileList(starredFiles, '暂无收藏文件，在文件详情页点击星标即可收藏')
+        renderFileList(
+          filteredStar,
+          normalizedQuery ? '没有匹配的收藏' : '还没有收藏',
+          normalizedQuery ? '试试换个关键词' : '在文件详情页点击星标，重要内容会集中在这里',
+        )
       ) : activeTab === 'imports' ? (
         jobsLoading ? (
           <p className="files-loading">
@@ -185,12 +222,12 @@ export function FilesPage() {
             加载导入记录…
           </p>
         ) : importJobs.length === 0 ? (
-          <div className="files-empty">
-            <p>暂无导入记录</p>
-            <button type="button" className="files-import-new-cta" onClick={() => setModalOpen(true)}>
-              去导入音视频
-            </button>
-          </div>
+          <EmptyState
+            title="还没有导入记录"
+            description="已导入的音视频和处理进度会显示在这里"
+            actionLabel="导入音视频"
+            onAction={() => setModalOpen(true)}
+          />
         ) : (
           <ul className="import-jobs-list">
             {importJobs.map((job) => {
@@ -233,9 +270,7 @@ export function FilesPage() {
           </ul>
         )
       ) : (
-        <div className="files-empty">
-          <p>回收站为空</p>
-        </div>
+        <EmptyState title="回收站为空" description="删除的文件会暂时保存在这里" />
       )}
 
       <p className="files-ai-note">以上内容由人工智能生成</p>

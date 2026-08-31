@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AlertCircle, Loader2 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { StructuredSummaryPanel } from '@/components/workspace/structured-summary-panel'
 import { filesApi } from '@/lib/api/files'
 import { buildEditorState, segmentPlainText } from '@/lib/file-editor'
@@ -170,7 +171,11 @@ export function ShareNotePage() {
                 ) : resultText ? (
                   <p className="share-page-fallback-text">{resultText}</p>
                 ) : (
-                  <p className="share-page-empty">暂无转写内容</p>
+                  <EmptyState
+                    compact
+                    title="暂无转写内容"
+                    description="分享者尚未生成或保留转写原文"
+                  />
                 )}
               </div>
             )}

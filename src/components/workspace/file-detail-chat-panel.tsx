@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react'
-import { ArrowUpRight, FileText, MessageSquarePlus } from 'lucide-react'
-import { ChatAvatar } from '@/components/chat/chat-avatar'
+import { ArrowUpRight, MessageSquarePlus } from 'lucide-react'
 import { ChatList } from '@/components/chat/chat-list'
 import { WorkspaceChatInput } from '@/components/workspace/workspace-chat-ui'
+import { LlmProviderPicker } from '@/components/workspace/llm-provider-picker'
 import { useChatStore } from '@/stores/chat-store'
 import type { ChatAttachment } from '@/types/chat'
 
 const DETAIL_CHAT_SUGGESTIONS = [
-  '用三句话概括核心内容',
-  '列出关键结论和对应依据',
-  '整理可以直接执行的下一步',
+  { label: '三句话概括', prompt: '用三句话概括这份内容的核心要点' },
+  { label: '结论与依据', prompt: '列出关键结论，并指出各自依据来自哪一段' },
+  { label: '易错点提醒', prompt: '这份内容里有哪些容易混淆或做错的点？' },
+  { label: '复习清单', prompt: '帮我整理一份可直接复习的要点清单' },
 ] as const
 
 interface FileDetailChatPanelProps {
@@ -54,49 +55,47 @@ export function FileDetailChatPanel({ fileId, title, duration }: FileDetailChatP
   }
 
   return (
-    <div className="file-detail-inline-chat">
-      <header className="file-detail-inline-chat-head">
-        <div className="file-detail-chat-context">
-          <FileText className="h-4 w-4" />
-          <div>
-            <span>当前文件</span>
-            <strong title={title}>{title}</strong>
-          </div>
-          {displayDuration ? <time>{displayDuration}</time> : null}
-        </div>
+    <div className="fd-chat">
+      <div className="fd-chat-bar">
+        <p className="fd-chat-bar-hint" title={title}>
+          结合转写与纪要回答
+        </p>
         <button
           type="button"
-          className="file-detail-chat-new"
+          className="fd-chat-new"
           aria-label="新建对话"
           title="新建对话"
           onClick={handleNewChat}
         >
-          <MessageSquarePlus className="h-4 w-4" />
+          <MessageSquarePlus className="h-3.5 w-3.5" />
+          新对话
         </button>
-      </header>
+      </div>
 
-      <div className="file-detail-inline-chat-body">
+      <div className="fd-chat-body">
         {messages.length > 0 ? (
           <ChatList
             messages={messages}
-            className="file-detail-inline-chat-messages"
+            className="fd-chat-messages"
             variant="workspace"
             insertFileId={fileId}
+            hideAttachments
           />
         ) : (
-          <div className="file-detail-chat-empty">
-            <ChatAvatar role="assistant" className="file-detail-chat-empty-avatar" />
-            <h3>你想进一步确认什么？</h3>
-            <div className="file-detail-chat-prompts">
-              {DETAIL_CHAT_SUGGESTIONS.map((suggestion) => (
+          <div className="fd-chat-empty">
+            <p className="fd-chat-empty-title">从下面选一个，或直接输入问题</p>
+            <div className="fd-chat-suggestions" role="list">
+              {DETAIL_CHAT_SUGGESTIONS.map((item) => (
                 <button
-                  key={suggestion}
+                  key={item.label}
                   type="button"
+                  role="listitem"
+                  className="fd-chat-suggestion"
                   disabled={isStreaming}
-                  onClick={() => handleSend(suggestion)}
+                  onClick={() => handleSend(item.prompt)}
                 >
-                  <span>{suggestion}</span>
-                  <ArrowUpRight className="h-4 w-4" />
+                  <span>{item.label}</span>
+                  <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
                 </button>
               ))}
             </div>
@@ -104,17 +103,17 @@ export function FileDetailChatPanel({ fileId, title, duration }: FileDetailChatP
         )}
       </div>
 
-      <footer className="file-detail-inline-chat-foot">
+      <footer className="fd-chat-foot">
+        <LlmProviderPicker disabled={isStreaming} className="fd-chat-llm-picker" />
         <WorkspaceChatInput
           value={draft}
-          attachments={[attachment]}
-          placeholder="问这份内容，例如：哪一段提到了预算？"
+          placeholder="例如：最短路径和最小生成树有什么区别？"
           onChange={setDraft}
           onSend={() => handleSend()}
           onAbort={abortStream}
           isStreaming={isStreaming}
         />
-        <p>以上内容由人工智能生成，仅供参考</p>
+        <p className="fd-chat-disclaimer">内容由 AI 生成，仅供参考</p>
       </footer>
     </div>
   )

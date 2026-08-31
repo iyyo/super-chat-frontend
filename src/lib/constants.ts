@@ -2,6 +2,7 @@ import { WEBSITE_IMAGES } from '@/lib/website-assets'
 
 export const APP_NAME = import.meta.env.VITE_APP_TITLE ?? 'IYY AI'
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
+export const AUTH_STORAGE_KEY = 'iyy-auth'
 
 /** 全局默认品牌色（可通过主题设置覆盖，持久化到 localStorage） */
 export const DEFAULT_BRAND_COLOR = '#6366f1'

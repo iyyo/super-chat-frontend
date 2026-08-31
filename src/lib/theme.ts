@@ -73,17 +73,24 @@ export function applyBrandTheme(primary: string) {
   const palette = buildBrandPalette(primary) ?? buildBrandPalette(DEFAULT_BRAND_COLOR)
   if (!palette) return
 
+  const softAlpha = `rgba(${palette.rgb}, 0.08)`
   const root = document.documentElement
+
+  // 官网 / 通用品牌 token
   root.style.setProperty('--ifly-blue', palette.primary)
   root.style.setProperty('--ifly-blue-hover', palette.hover)
   root.style.setProperty('--ifly-blue-light', palette.light)
+  root.style.setProperty('--ifly-accent-subtle', palette.mid)
   root.style.setProperty('--brand-primary', palette.primary)
   root.style.setProperty('--brand-hover', palette.hover)
   root.style.setProperty('--brand-light', palette.light)
   root.style.setProperty('--brand-mid', palette.mid)
   root.style.setProperty('--brand-soft', palette.soft)
   root.style.setProperty('--brand-rgb', palette.rgb)
-  root.style.setProperty('--brand-summary-gradient', `linear-gradient(135deg, ${palette.light} 0%, ${palette.summaryEnd} 100%)`)
+  root.style.setProperty(
+    '--brand-summary-gradient',
+    `linear-gradient(135deg, ${palette.light} 0%, ${palette.summaryEnd} 100%)`,
+  )
   root.style.setProperty('--official-card-border', `rgba(${palette.rgb}, 0.14)`)
   root.style.setProperty(
     '--official-card-shadow',
@@ -94,10 +101,36 @@ export function applyBrandTheme(primary: string) {
     `0 4px 8px rgba(${palette.rgb}, 0.08), 0 14px 36px rgba(${palette.rgb}, 0.14)`,
   )
 
-  // C 端 Tailwind @theme 变量
+  // 工作台 historically 走 iflyrec / ws-*；必须与品牌色同步，否则换主题大量区域不生效
+  root.style.setProperty('--iflyrec-primary', palette.primary)
+  root.style.setProperty('--iflyrec-primary-hover', palette.hover)
+  root.style.setProperty('--iflyrec-primary-soft', softAlpha)
+  root.style.setProperty('--iflyrec-primary-rgb', palette.rgb)
+  root.style.setProperty('--ws-brand', palette.primary)
+  root.style.setProperty('--ws-brand-hover', palette.hover)
+  root.style.setProperty('--ws-brand-soft', softAlpha)
+  root.style.setProperty('--ifly-scrollbar-thumb', `rgba(${palette.rgb}, 0.16)`)
+  root.style.setProperty('--ifly-scrollbar-thumb-hover', `rgba(${palette.rgb}, 0.28)`)
+
+  // Tailwind @theme
   root.style.setProperty('--color-primary', palette.primary)
   root.style.setProperty('--color-accent', palette.soft)
 
   const meta = document.querySelector('meta[name="theme-color"]')
   if (meta) meta.setAttribute('content', palette.primary)
+}
+
+/** 在 React 挂载前同步已持久化主题，避免首屏闪回默认色 */
+export function applyPersistedBrandTheme() {
+  try {
+    const raw = localStorage.getItem('iyy-theme')
+    if (!raw) {
+      applyBrandTheme(DEFAULT_BRAND_COLOR)
+      return
+    }
+    const parsed = JSON.parse(raw) as { state?: { brandColor?: string } }
+    applyBrandTheme(parsed.state?.brandColor ?? DEFAULT_BRAND_COLOR)
+  } catch {
+    applyBrandTheme(DEFAULT_BRAND_COLOR)
+  }
 }

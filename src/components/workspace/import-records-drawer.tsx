@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Loader2, Mic, X } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ROUTES } from '@/lib/constants'
 import {
   isTranscribeDetailReady,
@@ -81,6 +82,7 @@ export function ImportRecordsDrawer({ open, onClose, onReopenImport }: ImportRec
   const showLiveRecording =
     liveRecording &&
     (recordingPhase === 'recording' ||
+      recordingPhase === 'reconnecting' ||
       recordingPhase === 'paused' ||
       recordingPhase === 'connecting')
 
@@ -131,7 +133,11 @@ export function ImportRecordsDrawer({ open, onClose, onReopenImport }: ImportRec
                   <p className="import-drawer-card-meta">
                     <span className="import-drawer-badge is-active">
                       <Mic className="h-3 w-3" />
-                      {recordingPhase === 'paused' ? '已暂停' : '录音中'}
+                      {recordingPhase === 'paused'
+                        ? '已暂停'
+                        : recordingPhase === 'reconnecting'
+                          ? '重连中'
+                          : '录音中'}
                     </span>
                     <span>{formatMs(recordingElapsed)}</span>
                   </p>
@@ -221,7 +227,11 @@ export function ImportRecordsDrawer({ open, onClose, onReopenImport }: ImportRec
           <section className="import-drawer-section">
             <p className="import-drawer-section-title">最近</p>
             {rest.length === 0 && !historyLoading && (
-              <p className="import-drawer-empty">暂无导入记录</p>
+              <EmptyState
+                compact
+                title="暂无导入记录"
+                description="新建导入后，可在这里查看处理进度"
+              />
             )}
             {rest.map((job) => {
               const st = jobStatusLabel(job)

@@ -1,9 +1,32 @@
 import { useId } from 'react'
 
-/** 流式回复首包前：单一 SVG 动效（轨道粒子 + 波形条 + 文案） */
-export function ChatThinkingIndicator() {
+interface ChatThinkingIndicatorProps {
+  /** 文件详情等窄栏：去掉花哨 SVG，只保留轻量文案 */
+  compact?: boolean
+}
+
+/** 流式回复首包前的等待态 */
+export function ChatThinkingIndicator({ compact = false }: ChatThinkingIndicatorProps) {
   const uid = useId().replace(/:/g, '')
   const grad = `think-grad-${uid}`
+
+  if (compact) {
+    return (
+      <div
+        className="workspace-msg-thinking is-compact"
+        role="status"
+        aria-live="polite"
+        aria-label="正在思考"
+      >
+        <span className="workspace-msg-thinking-dots" aria-hidden>
+          <i />
+          <i />
+          <i />
+        </span>
+        <span>正在整理回答…</span>
+      </div>
+    )
+  }
 
   return (
     <div className="workspace-msg-thinking" role="status" aria-live="polite" aria-label="正在思考">
@@ -22,12 +45,16 @@ export function ChatThinkingIndicator() {
           </linearGradient>
         </defs>
 
-        {/* 轨道思考球 */}
         <g transform="translate(20,20)">
           <circle r="13" stroke="currentColor" strokeOpacity="0.12" strokeWidth="1" fill="none" />
           <circle r="9.5" stroke="currentColor" strokeOpacity="0.2" strokeWidth="1" fill="none">
             <animate attributeName="r" values="8;10.5;8" dur="2.2s" repeatCount="indefinite" />
-            <animate attributeName="stroke-opacity" values="0.12;0.32;0.12" dur="2.2s" repeatCount="indefinite" />
+            <animate
+              attributeName="stroke-opacity"
+              values="0.12;0.32;0.12"
+              dur="2.2s"
+              repeatCount="indefinite"
+            />
           </circle>
           <circle r="2.6" fill="currentColor" />
           <g>
@@ -45,55 +72,80 @@ export function ChatThinkingIndicator() {
           </g>
         </g>
 
-        {/* 文案 */}
-        <text
-          className="workspace-msg-thinking-text"
-          x="46"
-          y="24.5"
-          fill="currentColor"
-        >
+        <text className="workspace-msg-thinking-text" x="46" y="24.5" fill="currentColor">
           正在思考
         </text>
 
-        {/* 波形条 */}
         <g className="workspace-msg-thinking-bars" transform="translate(126,20)">
           <rect x="0" y="-2" width="3.2" height="4" rx="1.6" fill={`url(#${grad})`}>
             <animate attributeName="height" values="4;15;4" dur="1.05s" repeatCount="indefinite" />
             <animate attributeName="y" values="-2;-9.5;-2" dur="1.05s" repeatCount="indefinite" />
           </rect>
           <rect x="9" y="-2" width="3.2" height="4" rx="1.6" fill={`url(#${grad})`}>
-            <animate attributeName="height" values="4;11;4" dur="1.05s" begin="0.12s" repeatCount="indefinite" />
-            <animate attributeName="y" values="-2;-7.5;-2" dur="1.05s" begin="0.12s" repeatCount="indefinite" />
+            <animate
+              attributeName="height"
+              values="4;11;4"
+              dur="1.05s"
+              begin="0.12s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="y"
+              values="-2;-7.5;-2"
+              dur="1.05s"
+              begin="0.12s"
+              repeatCount="indefinite"
+            />
           </rect>
           <rect x="18" y="-2" width="3.2" height="4" rx="1.6" fill={`url(#${grad})`}>
-            <animate attributeName="height" values="4;17;4" dur="1.05s" begin="0.24s" repeatCount="indefinite" />
-            <animate attributeName="y" values="-2;-10.5;-2" dur="1.05s" begin="0.24s" repeatCount="indefinite" />
+            <animate
+              attributeName="height"
+              values="4;17;4"
+              dur="1.05s"
+              begin="0.24s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="y"
+              values="-2;-10.5;-2"
+              dur="1.05s"
+              begin="0.24s"
+              repeatCount="indefinite"
+            />
           </rect>
           <rect x="27" y="-2" width="3.2" height="4" rx="1.6" fill={`url(#${grad})`}>
-            <animate attributeName="height" values="4;12;4" dur="1.05s" begin="0.36s" repeatCount="indefinite" />
-            <animate attributeName="y" values="-2;-8;-2" dur="1.05s" begin="0.36s" repeatCount="indefinite" />
+            <animate
+              attributeName="height"
+              values="4;12;4"
+              dur="1.05s"
+              begin="0.36s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="y"
+              values="-2;-8;-2"
+              dur="1.05s"
+              begin="0.36s"
+              repeatCount="indefinite"
+            />
           </rect>
           <rect x="36" y="-2" width="3.2" height="4" rx="1.6" fill={`url(#${grad})`}>
-            <animate attributeName="height" values="4;14;4" dur="1.05s" begin="0.48s" repeatCount="indefinite" />
-            <animate attributeName="y" values="-2;-9;-2" dur="1.05s" begin="0.48s" repeatCount="indefinite" />
+            <animate
+              attributeName="height"
+              values="4;14;4"
+              dur="1.05s"
+              begin="0.48s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="y"
+              values="-2;-9;-2"
+              dur="1.05s"
+              begin="0.48s"
+              repeatCount="indefinite"
+            />
           </rect>
         </g>
-
-        {/* 底部微光扫过 */}
-        <rect
-          className="workspace-msg-thinking-shimmer"
-          x="42"
-          y="31"
-          width="52"
-          height="1.5"
-          rx="0.75"
-          fill="currentColor"
-          fillOpacity="0.2"
-        >
-          <animate attributeName="x" values="42;96;42" dur="2.6s" repeatCount="indefinite" />
-          <animate attributeName="width" values="28;52;28" dur="2.6s" repeatCount="indefinite" />
-          <animate attributeName="fill-opacity" values="0.08;0.35;0.08" dur="2.6s" repeatCount="indefinite" />
-        </rect>
       </svg>
     </div>
   )

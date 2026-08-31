@@ -5,6 +5,12 @@ import {
   type TranscribeJobDto,
   type UploadSessionDto,
 } from '@/lib/api/transcribe'
+import {
+  runImportTask,
+  uploadFileChunks,
+  type ImportTaskSettings,
+  type ImportMode,
+} from '@/lib/import-task-runner'
 import { toast } from '@/stores/toast-store'
 import { useFilesStore } from '@/stores/files-store'
 
@@ -16,18 +22,23 @@ export type ImportPhase =
   | 'success'
   | 'error'
 
-export interface ImportSettings {
-  language: string
-  domain: string
-  speakerCount: string
-  hotwords: string[]
+export type ImportSettings = ImportTaskSettings
+
+export type BatchImportItemPhase = 'uploading' | 'transcribing' | 'success' | 'error'
+
+export interface BatchImportItem {
+  id: string
+  fileName: string
+  fileSize: number
+  phase: BatchImportItemPhase
+  progress: number
+  errorMessage: string | null
 }
 
 export const MAX_FILE_SIZE = 500 * 1024 * 1024
 export const MAX_BATCH_FILES = 100
 
 const STORAGE_KEY = 'iyy_import_manifest'
-const CHUNK_RETRY = 3
 
 interface StoredManifest {
   uploadId: string
@@ -48,16 +59,18 @@ interface ImportTaskState {
   jobHistory: TranscribeJobDto[]
   historyLoading: boolean
   batchTotal: number
-  batchCurrent: number
   batchSucceeded: number
   batchFailed: number
+  batchItems: BatchImportItem[]
   completedJobs: TranscribeJobDto[]
+  mergedFileId: string | null
 
   setModalOpen: (open: boolean) => void
   setRecordsOpen: (open: boolean) => void
   fetchJobHistory: () => Promise<void>
   startImport: (file: File, settings: ImportSettings) => Promise<void>
-  startBatchImport: (files: File[], settings: ImportSettings) => Promise<void>
+  startBatchImport: (files: File[], settings: ImportSettings, mode?: ImportMode) => Promise<void>
+  startUrlImport: (audioUrl: string, settings: ImportSettings) => Promise<void>
   resumeUpload: (file: File) => Promise<void>
   retryTranscribe: () => Promise<void>
   reset: () => void
@@ -66,6 +79,7 @@ interface ImportTaskState {
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let abortUpload = false
+let batchRunVersion = 0
 
 function loadManifest(): StoredManifest | null {
   try {
@@ -99,47 +113,33 @@ type SetState = (
 ) => void
 type GetState = () => ImportTaskState
 
-async function uploadChunks(
-  file: File,
-  uploadId: string,
-  chunkSize: number,
-  uploaded: number[],
+function batchItemId(file: File, index: number) {
+  return `${file.name}-${file.size}-${file.lastModified}-${index}`
+}
+
+function updateBatchItem(
   set: SetState,
-): Promise<'done' | 'paused' | 'aborted'> {
-  const totalChunks = Math.ceil(file.size / chunkSize)
-  const done = new Set(uploaded)
+  id: string,
+  patch:
+    | Partial<BatchImportItem>
+    | ((item: BatchImportItem) => Partial<BatchImportItem>),
+) {
+  set((state) => {
+    const batchItems = state.batchItems.map((item) => {
+      if (item.id !== id) return item
+      const next = typeof patch === 'function' ? patch(item) : patch
+      return { ...item, ...next }
+    })
+    const totalProgress = batchItems.reduce((sum, item) => sum + item.progress, 0)
+    const hasUploading = batchItems.some((item) => item.phase === 'uploading')
+    const hasTranscribing = batchItems.some((item) => item.phase === 'transcribing')
 
-  for (let i = 0; i < totalChunks; i++) {
-    if (abortUpload) return 'aborted'
-    if (done.has(i)) continue
-
-    const start = i * chunkSize
-    const end = Math.min(file.size, start + chunkSize)
-    const blob = file.slice(start, end)
-
-    let lastErr: unknown
-    for (let attempt = 0; attempt < CHUNK_RETRY; attempt++) {
-      try {
-        const s = await transcribeApi.uploadChunk(uploadId, i, blob)
-        set({ session: s, uploadProgress: s.progress })
-        done.add(i)
-        lastErr = null
-        break
-      } catch (err) {
-        lastErr = err
-        if (!navigator.onLine) {
-          set({
-            phase: 'upload_paused',
-            errorMessage: '网络中断，已保存进度，恢复后将自动续传',
-          })
-          return 'paused'
-        }
-        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)))
-      }
+    return {
+      batchItems,
+      uploadProgress: batchItems.length === 0 ? 0 : Math.round(totalProgress / batchItems.length),
+      phase: hasUploading ? 'uploading' : hasTranscribing ? 'transcribing' : state.phase,
     }
-    if (lastErr) throw lastErr
-  }
-  return 'done'
+  })
 }
 
 function startJobPoll(jobId: string, set: SetState, get: GetState) {
@@ -176,75 +176,6 @@ function startJobPoll(jobId: string, set: SetState, get: GetState) {
   }, 3000)
 }
 
-async function waitForJobComplete(jobId: string, set: SetState): Promise<TranscribeJobDto> {
-  return new Promise((resolve, reject) => {
-    const tick = async () => {
-      try {
-        const j = await transcribeApi.getJob(jobId)
-        set({ job: j })
-        if (j.status === 'transcribing') {
-          set((s) => ({
-            uploadProgress: Math.max(s.uploadProgress, j.progress),
-          }))
-        }
-        if (isTranscribeDetailReady(j)) {
-          clearInterval(timer)
-          resolve(j)
-          return
-        }
-        if (j.status === 'failed') {
-          clearInterval(timer)
-          reject(new Error(j.errorMessage ?? '转写失败'))
-        }
-      } catch (err) {
-        clearInterval(timer)
-        reject(err instanceof Error ? err : new Error('查询任务失败'))
-      }
-    }
-    const timer = setInterval(() => void tick(), 3000)
-    void tick()
-  })
-}
-
-async function runSingleImport(
-  file: File,
-  settings: ImportSettings,
-  set: SetState,
-  get: GetState,
-  options: { awaitComplete: boolean },
-): Promise<TranscribeJobDto | null> {
-  const s = await transcribeApi.initUpload({
-    fileName: file.name,
-    fileSize: file.size,
-    mimeType: file.type || undefined,
-    ...settings,
-  })
-  set({ session: s, uploadProgress: 0 })
-  saveManifest({
-    uploadId: s.id,
-    fileName: file.name,
-    fileSize: file.size,
-    settings,
-  })
-
-  const uploadResult = await uploadChunks(file, s.id, s.chunkSize, s.uploadedChunks, set)
-  if (uploadResult === 'aborted') return null
-  if (uploadResult === 'paused') return null
-  if (abortUpload) return null
-
-  set({ phase: 'transcribing' })
-  const j = await transcribeApi.completeUpload(s.id)
-  set({ job: j })
-
-  if (options.awaitComplete) {
-    return await waitForJobComplete(j.id, set)
-  }
-
-  startJobPoll(j.id, set, get)
-  void get().fetchJobHistory()
-  return j
-}
-
 export const useImportTaskStore = create<ImportTaskState>((set, get) => ({
   phase: 'idle',
   fileName: null,
@@ -257,10 +188,11 @@ export const useImportTaskStore = create<ImportTaskState>((set, get) => ({
   jobHistory: [],
   historyLoading: false,
   batchTotal: 0,
-  batchCurrent: 0,
   batchSucceeded: 0,
   batchFailed: 0,
+  batchItems: [],
   completedJobs: [],
+  mergedFileId: null,
 
   setModalOpen: (open) => set({ modalOpen: open }),
   setRecordsOpen: (open) => set({ recordsOpen: open }),
@@ -282,6 +214,7 @@ export const useImportTaskStore = create<ImportTaskState>((set, get) => ({
 
   reset: () => {
     abortUpload = true
+    batchRunVersion++
     stopPoll()
     set({
       phase: 'idle',
@@ -291,21 +224,24 @@ export const useImportTaskStore = create<ImportTaskState>((set, get) => ({
       errorMessage: null,
       uploadProgress: 0,
       batchTotal: 0,
-      batchCurrent: 0,
       batchSucceeded: 0,
       batchFailed: 0,
+      batchItems: [],
       completedJobs: [],
+      mergedFileId: null,
     })
     saveManifest(null)
   },
 
   startImport: async (file, settings) => {
+    if (isActivePhase(get().phase)) return
     if (file.size > MAX_FILE_SIZE) {
       set({ phase: 'error', errorMessage: '文件超过 500MB 上限', fileName: file.name })
       return
     }
 
     abortUpload = false
+    batchRunVersion++
     set({
       phase: 'uploading',
       fileName: file.name,
@@ -314,21 +250,79 @@ export const useImportTaskStore = create<ImportTaskState>((set, get) => ({
       job: null,
       modalOpen: true,
       batchTotal: 1,
-      batchCurrent: 1,
       batchSucceeded: 0,
       batchFailed: 0,
+      batchItems: [],
       completedJobs: [],
+      mergedFileId: null,
     })
 
     try {
-      await runSingleImport(file, settings, set, get, { awaitComplete: false })
+      const nextJob = await runImportTask(
+        file,
+        settings,
+        {
+          shouldAbort: () => abortUpload,
+          onSession: (nextSession) => {
+            set({ session: nextSession, uploadProgress: 0 })
+            saveManifest({
+              uploadId: nextSession.id,
+              fileName: file.name,
+              fileSize: file.size,
+              settings,
+            })
+          },
+          onUploadProgress: (nextSession) =>
+            set({ session: nextSession, uploadProgress: nextSession.progress }),
+          onPaused: (message) => set({ phase: 'upload_paused', errorMessage: message }),
+          onTranscribing: () => set({ phase: 'transcribing' }),
+          onJob: (nextJobState) => set({ job: nextJobState }),
+        },
+        { awaitComplete: false },
+      )
+      if (!nextJob) return
+      startJobPoll(nextJob.id, set, get)
+      void get().fetchJobHistory()
     } catch (err) {
       const msg = err instanceof Error ? err.message : '导入失败，请重试'
       set({ phase: 'error', errorMessage: msg })
     }
   },
 
-  startBatchImport: async (files, settings) => {
+  startUrlImport: async (audioUrl, settings) => {
+    if (isActivePhase(get().phase)) return
+    abortUpload = false
+    batchRunVersion++
+    saveManifest(null)
+    set({
+      phase: 'transcribing',
+      fileName: '音频链接',
+      session: null,
+      job: null,
+      errorMessage: null,
+      uploadProgress: 0,
+      modalOpen: true,
+      batchTotal: 1,
+      batchSucceeded: 0,
+      batchFailed: 0,
+      batchItems: [],
+      completedJobs: [],
+      mergedFileId: null,
+    })
+
+    try {
+      const nextJob = await transcribeApi.importUrl({ audioUrl, ...settings })
+      set({ job: nextJob, fileName: nextJob.fileName })
+      startJobPoll(nextJob.id, set, get)
+      void get().fetchJobHistory()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '音频链接导入失败'
+      set({ phase: 'error', errorMessage: message })
+    }
+  },
+
+  startBatchImport: async (files, settings, mode = 'separate') => {
+    if (isActivePhase(get().phase)) return
     const valid = files.filter((f) => f.size <= MAX_FILE_SIZE)
     if (valid.length === 0) {
       set({ phase: 'error', errorMessage: '没有可导入的文件' })
@@ -340,63 +334,183 @@ export const useImportTaskStore = create<ImportTaskState>((set, get) => ({
     }
 
     abortUpload = false
-    const completedJobs: TranscribeJobDto[] = []
-    let succeeded = 0
-    let failed = 0
+    const runVersion = ++batchRunVersion
+    const batchId = crypto.randomUUID()
+    const batchItems: BatchImportItem[] = valid.map((file, index) => ({
+      id: batchItemId(file, index),
+      fileName: file.name,
+      fileSize: file.size,
+      phase: 'uploading',
+      progress: 0,
+      errorMessage: null,
+    }))
+    saveManifest(null)
 
     set({
       phase: 'uploading',
+      fileName: null,
+      session: null,
       errorMessage: null,
       uploadProgress: 0,
       job: null,
       modalOpen: true,
       batchTotal: valid.length,
-      batchCurrent: 0,
       batchSucceeded: 0,
       batchFailed: 0,
+      batchItems,
       completedJobs: [],
+      mergedFileId: null,
     })
 
-    for (let i = 0; i < valid.length; i++) {
-      if (abortUpload) return
+    const results = await Promise.all(
+      valid.map(
+        async (
+          file,
+          index,
+        ): Promise<{
+          job: TranscribeJobDto | null
+          errorMessage: string | null
+          aborted: boolean
+        }> => {
+          const id = batchItemId(file, index)
+          try {
+            const job = await runImportTask(file, { ...settings, importMode: mode, batchId }, {
+              shouldAbort: () => abortUpload || batchRunVersion !== runVersion,
+              onSession: () => {
+                if (batchRunVersion !== runVersion) return
+                updateBatchItem(set, id, { phase: 'uploading', progress: 0 })
+              },
+              onUploadProgress: (session) => {
+                if (batchRunVersion !== runVersion) return
+                updateBatchItem(set, id, {
+                  phase: 'uploading',
+                  progress: Math.round(session.progress * 0.55),
+                })
+              },
+              onPaused: () => {
+                if (batchRunVersion !== runVersion) return
+                updateBatchItem(set, id, {
+                  phase: 'error',
+                  errorMessage: '网络中断，请重新导入该文件',
+                })
+              },
+              onTranscribing: () => {
+                if (batchRunVersion !== runVersion) return
+                updateBatchItem(set, id, (item) => ({
+                  phase: 'transcribing',
+                  progress: Math.max(item.progress, 55),
+                }))
+              },
+              onJob: (nextJob) => {
+                if (batchRunVersion !== runVersion) return
+                const ready = isTranscribeDetailReady(nextJob)
+                updateBatchItem(set, id, (item) => ({
+                  phase: ready ? 'success' : 'transcribing',
+                  progress: ready
+                    ? 100
+                    : Math.max(item.progress, Math.min(99, 55 + Math.round(nextJob.progress * 0.45))),
+                }))
+              },
+            }, { awaitComplete: true })
 
-      const file = valid[i]!
-      set({
-        batchCurrent: i + 1,
-        fileName: file.name,
-        phase: 'uploading',
-        uploadProgress: 0,
-        errorMessage: null,
-      })
+            if (batchRunVersion !== runVersion || abortUpload) {
+              return { job: null, errorMessage: null, aborted: true }
+            }
+            if (!job) {
+              const message =
+                get().batchItems.find((item) => item.id === id)?.errorMessage ?? '导入未完成'
+              updateBatchItem(set, id, { phase: 'error', errorMessage: message })
+              set((state) => ({ batchFailed: state.batchFailed + 1 }))
+              return { job: null, errorMessage: message, aborted: false }
+            }
 
-      try {
-        const job = await runSingleImport(file, settings, set, get, { awaitComplete: true })
-        if (!job) {
-          if (get().phase === 'upload_paused') return
-          if (abortUpload) return
-          continue
-        }
-        succeeded++
-        completedJobs.push(job)
-        set({ batchSucceeded: succeeded, completedJobs: [...completedJobs], job })
-      } catch (err) {
-        failed++
-        const msg = err instanceof Error ? err.message : '导入失败'
-        set({ batchFailed: failed, errorMessage: `${file.name}：${msg}` })
-        if (i < valid.length - 1) {
-          toast.warning(`${file.name} 失败，继续处理下一个`)
-        }
-      }
-    }
+            updateBatchItem(set, id, { phase: 'success', progress: 100, errorMessage: null })
+            set((state) => ({
+              batchSucceeded: state.batchSucceeded + 1,
+              completedJobs: [...state.completedJobs, job],
+              job,
+            }))
+            return { job, errorMessage: null, aborted: false }
+          } catch (err) {
+            if (batchRunVersion !== runVersion || abortUpload) {
+              return { job: null, errorMessage: null, aborted: true }
+            }
+            const message = err instanceof Error ? err.message : '导入失败'
+            updateBatchItem(set, id, { phase: 'error', errorMessage: message })
+            set((state) => ({ batchFailed: state.batchFailed + 1 }))
+            return { job: null, errorMessage: message, aborted: false }
+          }
+        },
+      ),
+    )
+
+    if (batchRunVersion !== runVersion || abortUpload) return
+
+    const completedJobs = results.flatMap((result) => (result.job ? [result.job] : []))
+    const failures = results.filter((result) => !result.aborted && result.errorMessage)
+    const succeeded = completedJobs.length
+    const failed = failures.length
 
     saveManifest(null)
     void get().fetchJobHistory()
-    void useFilesStore.getState().fetchFiles()
-
     if (succeeded === 0) {
-      set({ phase: 'error' })
+      set({
+        phase: 'error',
+        errorMessage: failures[0]?.errorMessage ?? '批量导入失败',
+      })
       return
     }
+
+    if (mode === 'merge' && failed > 0) {
+      set({
+        phase: 'error',
+        errorMessage: `有 ${failed} 个文件转写失败，未创建合并笔记`,
+        batchSucceeded: succeeded,
+        batchFailed: failed,
+        completedJobs,
+        job: completedJobs[completedJobs.length - 1] ?? null,
+      })
+      void get().fetchJobHistory()
+      return
+    }
+
+    if (mode === 'merge') {
+      try {
+        const { fileId } = await transcribeApi.mergeTranscripts({
+          jobIds: completedJobs.map((item) => item.id),
+        })
+        const linkedJobs = completedJobs.map((item) => ({
+          ...item,
+          workspaceFileId: fileId,
+          detailReady: true,
+        }))
+        void useFilesStore.getState().fetchFiles()
+        void get().fetchJobHistory()
+        toast.success('已合并为 1 篇笔记')
+        set({
+          phase: 'success',
+          uploadProgress: 100,
+          batchSucceeded: succeeded,
+          batchFailed: 0,
+          completedJobs: linkedJobs,
+          job: linkedJobs[linkedJobs.length - 1] ?? null,
+          mergedFileId: fileId,
+        })
+        return
+      } catch (error) {
+        set({
+          phase: 'error',
+          errorMessage: error instanceof Error ? error.message : '合并笔记失败，请重试',
+          batchSucceeded: succeeded,
+          batchFailed: failed,
+          completedJobs,
+          job: completedJobs[completedJobs.length - 1] ?? null,
+        })
+        return
+      }
+    }
+
+    void useFilesStore.getState().fetchFiles()
 
     if (failed > 0) {
       toast.warning(`完成 ${succeeded} 个，失败 ${failed} 个`)
@@ -428,19 +542,17 @@ export const useImportTaskStore = create<ImportTaskState>((set, get) => ({
       errorMessage: null,
       modalOpen: true,
       batchTotal: 1,
-      batchCurrent: 1,
+      batchItems: [],
     })
 
     try {
       const s = await transcribeApi.getUpload(manifest.uploadId)
       set({ session: s, uploadProgress: s.progress })
-      const uploadResult = await uploadChunks(
-        file,
-        s.id,
-        s.chunkSize,
-        s.uploadedChunks,
-        set,
-      )
+      const uploadResult = await uploadFileChunks(file, s, {
+        shouldAbort: () => abortUpload,
+        onUploadProgress: (session) => set({ session, uploadProgress: session.progress }),
+        onPaused: (message) => set({ phase: 'upload_paused', errorMessage: message }),
+      })
       if (uploadResult !== 'done' || abortUpload) return
 
       set({ phase: 'transcribing' })

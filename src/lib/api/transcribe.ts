@@ -2,6 +2,7 @@ import { api } from '@/lib/api/client'
 
 export interface UploadSessionDto {
   id: string
+  sourceType: 'upload' | 'url'
   fileName: string
   fileSize: number
   chunkSize: number
@@ -20,6 +21,7 @@ export interface UploadSessionDto {
 
 export interface TranscribeJobDto {
   id: string
+  sourceType: 'upload' | 'url'
   uploadSessionId: string
   fileName: string
   status: string
@@ -36,7 +38,7 @@ export interface TranscribeJobDto {
 }
 
 export function isTranscribeDetailReady(job: TranscribeJobDto): boolean {
-  return job.detailReady ?? Boolean(job.workspaceFileId)
+  return job.detailReady ?? (Boolean(job.workspaceFileId) || job.status === 'completed')
 }
 
 export function isTranscribeJobActive(job: TranscribeJobDto): boolean {
@@ -57,9 +59,22 @@ export interface InitUploadPayload {
   speakerCount: string
   hotwords?: string[]
   durationMs?: number
+  importMode?: 'separate' | 'merge'
+  batchId?: string
+}
+
+export interface ImportUrlPayload {
+  audioUrl: string
+  language: string
+  domain: string
+  speakerCount: string
+  hotwords?: string[]
 }
 
 export const transcribeApi = {
+  importUrl: (body: ImportUrlPayload) =>
+    api.post<TranscribeJobDto>('/transcribe/url-imports', body, { timeout: 30000 }),
+
   initUpload: (body: InitUploadPayload) =>
     api.post<UploadSessionDto>('/transcribe/uploads', body),
 
@@ -92,4 +107,7 @@ export const transcribeApi = {
   listUploads: () => api.get<UploadSessionDto[]>('/transcribe/uploads'),
 
   retryJob: (id: string) => api.post<TranscribeJobDto>(`/transcribe/jobs/${id}/retry`),
+
+  mergeTranscripts: (body: { jobIds: string[]; title?: string }) =>
+    api.post<{ fileId: string }>('/files/merge-transcripts', body, { timeout: 30000 }),
 }

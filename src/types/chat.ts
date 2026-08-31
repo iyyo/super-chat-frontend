@@ -29,6 +29,7 @@ export interface Conversation {
 export interface SendMessagePayload {
   conversationId?: string
   content: string
+  provider?: string
   model?: string
   attachments?: ChatAttachment[]
 }

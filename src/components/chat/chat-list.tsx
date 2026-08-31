@@ -10,6 +10,8 @@ interface ChatListProps {
   className?: string
   variant?: 'app' | 'workspace'
   insertFileId?: string | null
+  /** 文件详情问答等场景：上下文已绑定，气泡里不再重复贴文件名 */
+  hideAttachments?: boolean
 }
 
 export function ChatList({
@@ -18,6 +20,7 @@ export function ChatList({
   className,
   variant = 'app',
   insertFileId,
+  hideAttachments = false,
 }: ChatListProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const prevLengthRef = useRef(messages.length)
@@ -71,6 +74,7 @@ export function ChatList({
           message={message}
           variant={variant}
           insertFileId={insertFileId}
+          hideAttachments={hideAttachments}
         />
       ))}
     </div>

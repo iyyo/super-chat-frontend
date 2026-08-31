@@ -1,5 +1,5 @@
 import axios, { type AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios'
-import { API_BASE_URL } from '@/lib/constants'
+import { API_BASE_URL, AUTH_STORAGE_KEY, ROUTES } from '@/lib/constants'
 import { ApiClientError } from '@/lib/errors/api-client-error'
 import { toast } from '@/stores/toast-store'
 import type { ApiError, ApiResponse } from '@/types/api'
@@ -36,13 +36,17 @@ function notifyError(message: string, config?: RetryConfig) {
   }
 }
 
-function redirectToLogin() {
+function redirectToLogin(): boolean {
   localStorage.removeItem('access_token')
+  localStorage.removeItem(AUTH_STORAGE_KEY)
   const path = window.location.pathname
-  if (!path.startsWith('/auth') && !path.startsWith('/legal') && !path.startsWith('/share')) {
-    toast.warning('登录状态已过期，请重新登录')
-    window.location.href = '/auth'
-  }
+  if (path.startsWith('/legal') || path.startsWith('/share')) return false
+  if (path.startsWith('/auth') || redirectingToLogin) return true
+
+  redirectingToLogin = true
+  toast.warning('登录状态已过期，请重新登录')
+  window.location.replace(ROUTES.auth)
+  return true
 }
 
 async function refreshAccessToken(): Promise<string | null> {
@@ -72,6 +76,7 @@ export const http = axios.create({
 })
 
 let refreshPromise: Promise<string | null> | null = null
+let redirectingToLogin = false
 
 http.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token')
@@ -109,7 +114,9 @@ http.interceptors.response.use(
         return http(original)
       }
 
-      redirectToLogin()
+      if (redirectToLogin()) {
+        return Promise.reject(new ApiClientError(401, '登录状态已过期'))
+      }
     }
 
     const payload = error.response?.data

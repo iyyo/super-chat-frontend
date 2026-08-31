@@ -3,9 +3,8 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { WorkspaceMobileHeader } from '@/components/layout/workspace-mobile-header'
 import { WorkspaceSidebar } from '@/components/layout/workspace-sidebar'
 import { ImportMediaModal } from '@/components/workspace/import-media-modal'
-import { MinimizedRecorderBar } from '@/components/workspace/minimized-recorder-bar'
 import { ImportRecordsDrawer } from '@/components/workspace/import-records-drawer'
-import { ImportTaskCapsule } from '@/components/workspace/import-task-capsule'
+import { WorkspaceActivityRail } from '@/components/workspace/workspace-activity-rail'
 import { ROUTES } from '@/lib/constants'
 import { isFileDetailPath } from '@/lib/workspace-routes'
 import { useImportTaskStore } from '@/stores/import-task-store'
@@ -52,16 +51,15 @@ export function AppLayout() {
       {!isManualPage && <WorkspaceSidebar />}
       <div className="app-workspace-main">
         {!isManualPage && <WorkspaceMobileHeader />}
-        <ImportTaskCapsule />
         <Outlet />
       </div>
+      {!isManualPage && <WorkspaceActivityRail />}
       <ImportRecordsDrawer
         open={recordsOpen}
         onClose={() => setRecordsOpen(false)}
         onReopenImport={() => setModalOpen(true)}
       />
       <ImportMediaModal open={modalOpen} onClose={() => setModalOpen(false)} />
-      <MinimizedRecorderBar />
     </div>
   )
 }

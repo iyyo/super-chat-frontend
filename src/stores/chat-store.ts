@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { streamRequest } from '@/lib/api/stream'
 import { generateId } from '@/lib/utils'
+import { useLlmPreferenceStore } from '@/stores/llm-preference-store'
 import type {
   ChatHistoryMessage,
   ChatMessage,
@@ -44,8 +45,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return id
   },
 
-  sendMessage: async ({ conversationId, content, model, attachments }) => {
+  sendMessage: async ({ conversationId, content, provider, model, attachments }) => {
     const state = get()
+    const llmPreference = useLlmPreferenceStore.getState()
+    const resolvedProvider =
+      provider ?? (llmPreference.selectedProvider || undefined)
+    const resolvedModel = model ?? llmPreference.selectedModel
     let targetId = conversationId ?? state.activeConversationId
 
     if (!targetId) {
@@ -93,7 +98,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         {
           conversationId: targetId,
           content,
-          model,
+          provider: resolvedProvider,
+          model: resolvedModel,
           fileIds: fileIds.length ? fileIds : undefined,
           history: history.length ? history : undefined,
         },

@@ -1,0 +1,131 @@
+.import-source-picker {
+  width: min(100%, 440px);
+  margin: 0 auto 22px;
+}
+
+.import-source-segment {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--ifly-border-muted);
+  border-radius: 8px;
+  background: var(--ifly-surface-subtle);
+}
+
+.import-source-segment button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: transparent;
+  color: var(--ifly-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.import-source-segment button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.import-source-segment button:hover:not(:disabled) {
+  color: var(--ifly-chip-text);
+}
+
+.import-source-segment button.is-active {
+  background: var(--ifly-surface);
+  color: var(--ws-brand);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.import-source-segment button:focus-visible,
+.import-url-input-wrap:focus-within {
+  outline: 2px solid rgba(var(--brand-rgb), 0.2);
+  outline-offset: 2px;
+}
+
+.import-url-panel {
+  margin-top: 22px;
+  text-align: left;
+}
+
+.import-url-panel label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--ifly-chip-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.import-url-input-wrap {
+  display: flex;
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid var(--ifly-border-default);
+  border-radius: 8px;
+  align-items: center;
+  gap: 9px;
+  background: var(--ifly-surface);
+  color: var(--ifly-text-tertiary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.import-url-input-wrap:focus-within {
+  border-color: var(--ws-brand);
+}
+
+.import-url-input-wrap.is-error {
+  border-color: var(--iflyrec-error);
+}
+
+.import-url-input-wrap > svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+
+.import-url-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ifly-chip-text);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.import-url-input-wrap input::placeholder {
+  color: var(--ifly-text-tertiary);
+}
+
+.import-url-message {
+  margin: 9px 2px 0;
+  color: var(--ifly-text-tertiary);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.import-url-message.is-error {
+  color: var(--iflyrec-error);
+}
+
+@media (max-width: 767px) {
+  .import-source-picker {
+    margin-bottom: 16px;
+  }
+
+  .import-url-panel {
+    margin-top: 16px;
+  }
+}

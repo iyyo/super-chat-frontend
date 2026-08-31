@@ -44,9 +44,9 @@ html.auth-route-active #root {
   overflow: hidden;
   background: linear-gradient(
     160deg,
-    var(--ws-brand-hover, #1554e0) 0%,
-    var(--ws-brand, #1e64ff) 55%,
-    #3d7dff 100%
+    var(--ws-brand-hover) 0%,
+    var(--ws-brand) 55%,
+    var(--brand-mid) 100%
   );
   color: #fff;
 }

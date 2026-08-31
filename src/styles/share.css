@@ -164,19 +164,12 @@
   white-space: pre-wrap;
 }
 
-.share-page-fallback-text,
-.share-page-empty {
+.share-page-fallback-text {
   margin: 0;
   font-size: 14px;
   line-height: 1.75;
   color: var(--ifly-text-secondary);
   white-space: pre-wrap;
-}
-
-.share-page-empty {
-  text-align: center;
-  color: var(--ifly-text-muted);
-  padding: 32px 0;
 }
 
 .share-page-footer {

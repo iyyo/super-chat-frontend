@@ -2,25 +2,87 @@ import { api } from '@/lib/api/client'
 import type { WorkspaceFileDto } from '@/lib/api/files'
 import type { SummaryStatus } from '@/lib/structured-summary-document'
 
+export type RtAsrProvider = 'xfyun' | 'aliyun'
+
 export interface RtAsrSessionCreated {
   sessionId: string
+  provider: RtAsrProvider
   wsPath: string
+  manageWsPath?: string
+  audioWsPath?: string
 }
 
 export interface RtAsrLiveSession {
   sessionId: string
+  provider: RtAsrProvider
   title: string | null
   chunkIndex: number
   chunkOffsetMs: number
+  elapsedMs?: number
   wsPath: string
+  manageWsPath?: string
+  audioWsPath?: string
   startedAt: string
   featureIds: string[] | null
+  domain?: string | null
+  deviceId?: string | null
+  checkpoint?: {
+    segments: Array<{
+      id: string
+      rl: number
+      speakerDisplay: string
+      speakerOverride: boolean
+      beginMs: number
+      endMs: number
+      text: string
+      isFinal: boolean
+    }>
+    speakerAliasMap: Record<number, string>
+    segmentOverrides: Record<string, number>
+    markers: Array<{ id: string; atMs: number; label?: string }>
+    domain?: string
+    deviceId?: string | null
+    featureIds?: string[]
+  } | null
+}
+
+export interface RtAsrInterruptNotice {
+  sessionId: string
+  title: string
+  elapsedMs: number
+  segmentCount: number
+  fileId: string | null
+  savePending: boolean
+  reason: 'reconnect_failed'
+  savedAt: string
+}
+
+export interface RtAsrRecoveryState {
+  live: RtAsrLiveSession | null
+  interrupt: RtAsrInterruptNotice | null
+}
+
+export interface RtAsrCheckpointPayload {
+  elapsedMs: number
+  title?: string
+  chunkIndex?: number
+  chunkOffsetMs?: number
+  domain?: string
+  deviceId?: string | null
+  featureIds?: string[]
+  segments: NonNullable<RtAsrLiveSession['checkpoint']>['segments']
+  speakerAliasMap: Record<string, string>
+  segmentOverrides: Record<string, number>
+  markers: NonNullable<RtAsrLiveSession['checkpoint']>['markers']
 }
 
 export interface RtAsrRenewResult {
   chunkIndex: number
   chunkOffsetMs: number
+  provider: RtAsrProvider
   wsPath: string
+  manageWsPath?: string
+  audioWsPath?: string
 }
 
 export interface VoiceprintDto {
@@ -50,6 +112,7 @@ export interface FinishRecordingPayload {
   segments: FinishSegmentPayload[]
   markers?: FinishMarkerPayload[]
   saveAudio?: boolean
+  interrupted?: boolean
 }
 
 export interface FinishRecordingResult {
@@ -61,6 +124,7 @@ export interface FinishRecordingResult {
 
 export const rtasrApi = {
   createSession: (body?: {
+    provider?: RtAsrProvider
     lang?: string
     domain?: string
     title?: string
@@ -68,6 +132,16 @@ export const rtasrApi = {
   }) => api.post<RtAsrSessionCreated>('/rtasr/sessions', body ?? {}),
 
   getLiveSession: () => api.get<RtAsrLiveSession | null>('/rtasr/sessions/live'),
+
+  getRecovery: () => api.get<RtAsrRecoveryState>('/rtasr/sessions/recovery'),
+
+  saveCheckpoint: (sessionId: string, body: RtAsrCheckpointPayload) =>
+    api.put<{ ok: boolean; updatedAt: string }>(`/rtasr/sessions/${sessionId}/checkpoint`, body, {
+      skipToast: true,
+    }),
+
+  ackInterrupt: (sessionId: string) =>
+    api.post<{ ok: boolean }>(`/rtasr/sessions/${sessionId}/ack-interrupt`, {}),
 
   abandonLiveSession: () =>
     api.post<{ abandoned: boolean; sessionId?: string }>('/rtasr/sessions/live/abandon', {}),

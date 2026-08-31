@@ -7,6 +7,7 @@ import {
   WorkspaceChatHeader,
   WorkspaceChatInput,
 } from '@/components/workspace/workspace-chat-ui'
+import { LlmProviderPicker } from '@/components/workspace/llm-provider-picker'
 import {
   ROUTES,
   WORKSPACE_CHAT_AI_NOTE,
@@ -167,6 +168,7 @@ export function ChatPage() {
           </div>
         )}
 
+        <LlmProviderPicker disabled={isStreaming} className="workspace-chat-llm-picker" />
         <WorkspaceChatInput
           value={draft}
           attachments={draftAttachments}

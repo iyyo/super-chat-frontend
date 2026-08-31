@@ -24,7 +24,13 @@ import {
 } from '@/lib/constants'
 import { defaultImportChatDraft, jobToAttachment, type ChatLaunchState } from '@/lib/import-chat'
 import { useImportJob, useImportTaskStore, MAX_BATCH_FILES } from '@/stores/import-task-store'
+import { BatchImportProgress } from '@/components/workspace/batch-import-progress'
+import {
+  ImportSourcePicker,
+  type ImportSourceType,
+} from '@/components/workspace/import-source-picker'
 import { cn } from '@/lib/utils'
+import type { ImportMode } from '@/lib/import-task-runner'
 
 interface ImportMediaModalProps {
   open: boolean
@@ -40,6 +46,10 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [importMode, setImportMode] = useState<ImportMode>('separate')
+  const [sourceType, setSourceType] = useState<ImportSourceType>('file')
+  const [audioUrl, setAudioUrl] = useState('')
+  const [urlError, setUrlError] = useState<string | null>(null)
   const [language, setLanguage] = useState('zh-en')
   const [dragOver, setDragOver] = useState(false)
   const [speakerCount, setSpeakerCount] = useState('auto')
@@ -58,6 +68,7 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
     fileName,
     startImport,
     startBatchImport,
+    startUrlImport,
     resumeUpload,
     retryTranscribe,
     reset,
@@ -66,9 +77,10 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
     maxBatchFiles,
     storedManifest,
     batchTotal,
-    batchCurrent,
     batchSucceeded,
     batchFailed,
+    batchItems,
+    mergedFileId,
   } = useImportJob()
 
   const settingsLocked = phase !== 'idle' && phase !== 'error'
@@ -85,6 +97,7 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
       setHotwordsExpanded(false)
       setHotwordDraft('')
       setFileError(null)
+      setUrlError(null)
       return
     }
 
@@ -151,22 +164,45 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
   const activeFile =
     selectedFiles.find((f) => f.name === storedManifest?.fileName) ?? selectedFiles[0] ?? null
 
-  const batchLabel =
-    batchTotal > 1 ? `（${batchCurrent}/${batchTotal}）` : ''
-
   const formatSize = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
   const handleSubmit = () => {
-    if (selectedFiles.length === 0 || fileError) return
     const settings = { language, domain, speakerCount, hotwords }
+    if (sourceType === 'url') {
+      const value = audioUrl.trim()
+      try {
+        const parsed = new URL(value)
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error()
+      } catch {
+        setUrlError('请输入有效的 HTTP(S) 音频链接')
+        return
+      }
+      setUrlError(null)
+      void startUrlImport(value, settings)
+      return
+    }
+    if (selectedFiles.length === 0 || fileError) return
     if (selectedFiles.length === 1) {
       void startImport(selectedFiles[0]!, settings)
     } else {
-      void startBatchImport(selectedFiles, settings)
+      void startBatchImport(selectedFiles, settings, importMode)
     }
+  }
+
+  const resetImportForm = () => {
+    reset()
+    setSelectedFiles([])
+    setImportMode('separate')
+    setSourceType('file')
+    setAudioUrl('')
+    setUrlError(null)
+    setLanguage('zh-en')
+    setSpeakerCount('auto')
+    setDomain('general')
+    setHotwords([])
   }
 
   const handleClose = () => {
@@ -180,13 +216,23 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
   }
 
   const renderLeftPanel = () => {
+    if (batchTotal > 1 && batchItems.length > 0 && phase !== 'success') {
+      return (
+        <BatchImportProgress
+          items={batchItems}
+          overallProgress={uploadProgress}
+          succeeded={batchSucceeded}
+          failed={batchFailed}
+        />
+      )
+    }
+
     if (phase === 'uploading' || phase === 'upload_paused') {
       const uploaded = session?.uploadedChunks.length ?? 0
       const total = session?.totalChunks ?? 0
       return (
         <div className="import-progress-panel">
           <p className="import-progress-filename">
-            {batchLabel}
             {fileName ?? '文件'}
           </p>
           <p className="import-progress-meta">
@@ -225,26 +271,36 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
     }
 
     if (phase === 'transcribing') {
+      const isUrlImport = job?.sourceType === 'url' || sourceType === 'url'
       const preparingMedia = job?.status === 'queued' || job?.status === 'uploading_to_xfyun'
       return (
         <div className="import-progress-panel">
           <p className="import-progress-filename">
-            {batchLabel}
             {fileName ?? '文件'}
           </p>
-          <p className="import-progress-meta">✓ 上传完成</p>
+          <p className="import-progress-meta">{isUrlImport ? '公开音频链接' : '✓ 上传完成'}</p>
           <div className="import-progress-bar-wrap">
             <div className="import-progress-bar is-done" style={{ width: '100%' }} />
           </div>
           <p className="import-progress-hint is-transcribing">
             <Loader2 className="h-5 w-5 animate-spin" />
-            {preparingMedia ? '正在处理音轨并提交转写…' : 'IFASR 大模型转写中…'}
+            {isUrlImport && !job
+              ? '正在校验音频链接…'
+              : preparingMedia
+                ? isUrlImport
+                  ? '正在提交讯飞转写…'
+                  : '正在处理音轨并提交转写…'
+                : 'IFASR 大模型转写中…'}
           </p>
           <ul className="import-pipeline">
-            <li className="is-done">✓ 文件校验</li>
-            <li className="is-done">✓ 分片上传完成</li>
+            <li className="is-done">✓ {isUrlImport ? '链接安全校验' : '文件校验'}</li>
+            <li className="is-done">✓ {isUrlImport ? '提交讯飞' : '分片上传完成'}</li>
             <li className="is-active">
-              {preparingMedia ? '◉ 媒体预处理' : '◉ 语音识别 (IFASR)'}
+              {preparingMedia
+                ? isUrlImport
+                  ? '◉ 远程音频读取'
+                  : '◉ 媒体预处理'
+                : '◉ 语音识别 (IFASR)'}
             </li>
             <li>○ 写入文件库</li>
           </ul>
@@ -259,14 +315,18 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
             <Check className="h-10 w-10" />
           </span>
           <p className="import-progress-filename">
-            {batchTotal > 1
+            {mergedFileId
+              ? '已合并为 1 篇笔记'
+              : batchTotal > 1
               ? `已完成 ${batchSucceeded} 个文件`
               : job?.status === 'completed'
                 ? '转写完成'
                 : '内容已生成，可查看'}
           </p>
           <p className="import-progress-meta">
-            {batchTotal > 1
+            {mergedFileId
+              ? `已合并 ${batchTotal} 个音频，内容已写入文件库`
+              : batchTotal > 1
               ? batchFailed > 0
                 ? `成功 ${batchSucceeded} 个，失败 ${batchFailed} 个`
                 : `共 ${batchTotal} 个文件已加入文件库`
@@ -277,7 +337,19 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
           )}
           {(batchTotal > 1 || job?.workspaceFileId) && (
             <div className="import-success-actions">
-              {batchTotal > 1 ? (
+              {mergedFileId ? (
+                <button
+                  type="button"
+                  className="import-success-link is-primary"
+                  onClick={() => {
+                    setModalOpen(false)
+                    onClose()
+                    navigate(ROUTES.fileDetail(mergedFileId))
+                  }}
+                >
+                  查看合并笔记 →
+                </button>
+              ) : batchTotal > 1 ? (
                 <button
                   type="button"
                   className="import-success-link is-primary"
@@ -344,6 +416,22 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
 
     return (
       <>
+        <ImportSourcePicker
+          sourceType={sourceType}
+          audioUrl={audioUrl}
+          error={urlError}
+          onSourceTypeChange={(nextSource) => {
+            setSourceType(nextSource)
+            setFileError(null)
+            setUrlError(null)
+          }}
+          onAudioUrlChange={(value) => {
+            setAudioUrl(value)
+            setUrlError(null)
+          }}
+        />
+        {sourceType === 'file' && (
+          <>
         <input
           ref={fileInputRef}
           type="file"
@@ -399,6 +487,8 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
           <ShieldCheck className="h-4 w-4" aria-hidden="true" />
           数据安全保护 · 单文件最大 500MB
         </p>
+          </>
+        )}
       </>
     )
   }
@@ -445,6 +535,10 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
             <h2 id={titleId} className="import-modal-title">
               {phase === 'success'
                 ? '导入完成'
+                : batchTotal > 1 && phase === 'error'
+                  ? '批量导入失败'
+                  : batchTotal > 1 && (phase === 'uploading' || phase === 'transcribing')
+                    ? '批量处理中'
                 : phase === 'transcribing'
                   ? '转写中'
                   : phase === 'uploading' || phase === 'upload_paused'
@@ -469,22 +563,53 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
           <div
             className={cn(
               'import-dropzone',
+              sourceType === 'url' && phase === 'idle' && 'is-url',
               dragOver && 'is-dragover',
               selectedFiles.length > 0 && 'has-file',
               settingsLocked && 'is-locked',
             )}
             onDragOver={(e) => {
-              if (settingsLocked) return
+              if (settingsLocked || sourceType === 'url') return
               e.preventDefault()
               setDragOver(true)
             }}
             onDragLeave={() => setDragOver(false)}
-            onDrop={onDrop}
+            onDrop={(event) => {
+              if (sourceType === 'file') onDrop(event)
+            }}
           >
             {renderLeftPanel()}
           </div>
 
           <aside className={cn('import-modal-settings', settingsLocked && 'is-locked')}>
+            {sourceType === 'file' && selectedFiles.length > 1 && (
+              <div className="import-setting-block">
+                <p className="import-setting-label">导入方式</p>
+                <div className="import-mode-options" role="group" aria-label="导入方式">
+                  <button
+                    type="button"
+                    className={cn('import-mode-option', importMode === 'separate' && 'is-active')}
+                    onClick={() => !settingsLocked && setImportMode('separate')}
+                    disabled={settingsLocked}
+                  >
+                    分别创建
+                  </button>
+                  <button
+                    type="button"
+                    className={cn('import-mode-option', importMode === 'merge' && 'is-active')}
+                    onClick={() => !settingsLocked && setImportMode('merge')}
+                    disabled={settingsLocked}
+                  >
+                    合并为一篇
+                  </button>
+                </div>
+                <p className="import-mode-hint">
+                  {importMode === 'merge'
+                    ? '全部转写完成后合并成一篇笔记'
+                    : '每个音频分别生成一篇笔记'}
+                </p>
+              </div>
+            )}
             <div className="import-setting-block">
               <p className="import-setting-label">音频语言</p>
               <div className="import-lang-grid">
@@ -691,14 +816,7 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
               <button
                 type="button"
                 className="import-modal-secondary"
-                onClick={() => {
-                  reset()
-                  setSelectedFiles([])
-                  setLanguage('zh-en')
-                  setSpeakerCount('auto')
-                  setDomain('general')
-                  setHotwords([])
-                }}
+                onClick={resetImportForm}
               >
                 继续导入
               </button>
@@ -708,11 +826,19 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
               className="import-modal-submit"
               disabled={
                 phase === 'idle'
-                  ? selectedFiles.length === 0 || !!fileError
-                  : phase === 'upload_paused'
+                  ? sourceType === 'url'
+                    ? !audioUrl.trim() || !!urlError
+                    : selectedFiles.length === 0 || !!fileError
+                  : false
               }
               onClick={() => {
                 if (phase === 'success') {
+                  if (mergedFileId) {
+                    setModalOpen(false)
+                    onClose()
+                    navigate(ROUTES.fileDetail(mergedFileId))
+                    return
+                  }
                   if (batchTotal > 1) {
                     setModalOpen(false)
                     onClose()
@@ -724,6 +850,10 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
                     onClose()
                     navigate(ROUTES.fileDetail(job.workspaceFileId!))
                   }
+                  return
+                }
+                if (phase === 'error') {
+                  resetImportForm()
                   return
                 }
                 if (phase === 'idle') {
@@ -741,9 +871,13 @@ export function ImportMediaModal({ open, onClose }: ImportMediaModalProps) {
               }}
             >
               {phase === 'success'
-                ? batchTotal > 1
+                ? mergedFileId
+                  ? '查看合并笔记'
+                  : batchTotal > 1
                   ? '查看文件库'
                   : '查看文件'
+                : phase === 'error'
+                  ? '重新选择'
                 : phase === 'upload_paused'
                   ? '继续上传'
                   : phase === 'transcribing' || phase === 'uploading'

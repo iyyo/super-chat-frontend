@@ -1,0 +1,183 @@
+.import-progress-panel.import-batch-progress {
+  min-height: 0;
+  padding: 8px 4px 4px;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 14px;
+  text-align: left;
+  overflow: hidden;
+}
+
+.import-batch-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.import-batch-summary h3,
+.import-batch-summary p {
+  margin: 0;
+}
+
+.import-batch-summary h3 {
+  color: var(--ifly-chip-text);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.import-batch-summary p {
+  margin-top: 4px;
+  color: var(--ifly-text-secondary);
+  font-size: 12px;
+}
+
+.import-batch-summary strong {
+  color: var(--ws-brand);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.import-batch-overall,
+.import-batch-item-track {
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ifly-surface-subtle);
+}
+
+.import-batch-overall {
+  height: 7px;
+}
+
+.import-batch-overall > span,
+.import-batch-item-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ws-brand);
+  transition: width 0.25s ease;
+}
+
+.import-batch-list {
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-gutter: stable;
+}
+
+.import-batch-item {
+  display: flex;
+  gap: 10px;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--ifly-border-muted);
+}
+
+.import-batch-item:last-child {
+  border-bottom: none;
+}
+
+.import-batch-status-icon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(var(--brand-rgb), 0.1);
+  color: var(--ws-brand);
+}
+
+.import-batch-status-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.import-batch-item.is-success .import-batch-status-icon {
+  background: var(--ifly-success-ring);
+  color: var(--ifly-success);
+}
+
+.import-batch-item.is-error .import-batch-status-icon {
+  background: rgba(var(--iflyrec-error-rgb), 0.1);
+  color: var(--iflyrec-error);
+}
+
+.import-batch-item-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.import-batch-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.import-batch-item-head strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ifly-chip-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-batch-item-head > span {
+  flex: 0 0 auto;
+  color: var(--ifly-text-secondary);
+  font-size: 11px;
+}
+
+.import-batch-item.is-success .import-batch-item-head > span {
+  color: var(--ifly-success);
+}
+
+.import-batch-item.is-error .import-batch-item-head > span,
+.import-batch-item-meta .is-error {
+  color: var(--iflyrec-error);
+}
+
+.import-batch-item-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 3px;
+  color: var(--ifly-text-tertiary);
+  font-size: 11px;
+}
+
+.import-batch-item-meta .is-error {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-batch-item-track {
+  height: 3px;
+  margin-top: 8px;
+}
+
+.import-batch-item.is-success .import-batch-item-track > span {
+  background: var(--ifly-success);
+}
+
+.import-batch-item.is-error .import-batch-item-track > span {
+  background: var(--iflyrec-error);
+}
+
+@media (max-width: 767px) {
+  .import-batch-progress {
+    max-height: 360px;
+  }
+
+  .import-batch-item {
+    padding-block: 10px;
+  }
+}

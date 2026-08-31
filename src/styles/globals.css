@@ -19,9 +19,22 @@
 :root {
   --ifly-font: 'PingFang SC', 'PingFang TC', 'Microsoft YaHei', '微软雅黑', 'Helvetica Neue', Arial,
     sans-serif;
-  --iflyrec-primary-rgb: 30, 100, 255;
-  --ifly-scrollbar-thumb: rgba(var(--iflyrec-primary-rgb), 0.16);
-  --ifly-scrollbar-thumb-hover: rgba(var(--iflyrec-primary-rgb), 0.28);
+  /* 与 DEFAULT_BRAND_COLOR / official.css 默认一致；未加载 official.css 的路由也需可用 */
+  --ifly-blue: #6366f1;
+  --ifly-blue-hover: #4f46e5;
+  --ifly-blue-light: #eef2ff;
+  --brand-rgb: 99, 102, 241;
+  --brand-mid: #a5b4fc;
+  --brand-soft: #818cf8;
+  --iflyrec-primary: var(--ifly-blue);
+  --iflyrec-primary-hover: var(--ifly-blue-hover);
+  --iflyrec-primary-soft: rgba(var(--brand-rgb), 0.08);
+  --iflyrec-primary-rgb: var(--brand-rgb);
+  --ws-brand: var(--ifly-blue);
+  --ws-brand-hover: var(--ifly-blue-hover);
+  --ws-brand-soft: rgba(var(--brand-rgb), 0.08);
+  --ifly-scrollbar-thumb: rgba(var(--brand-rgb), 0.16);
+  --ifly-scrollbar-thumb-hover: rgba(var(--brand-rgb), 0.28);
   --ifly-scrollbar-track: transparent;
 }
 
@@ -66,4 +79,123 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ifly-scrollbar-thumb-hover);
+}
+
+.app-empty-state {
+  --empty-state-min-height: 220px;
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: var(--empty-state-min-height);
+  padding: 32px 20px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.app-empty-state--compact {
+  --empty-state-min-height: 148px;
+  padding: 22px 12px;
+}
+
+.app-empty-state__visual {
+  display: inline-flex;
+  width: 52px;
+  height: 52px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(var(--brand-rgb), 0.14);
+  border-radius: 8px;
+  background: rgba(var(--brand-rgb), 0.07);
+  color: var(--ifly-blue);
+  box-shadow: inset 0 0 0 6px rgba(var(--brand-rgb), 0.025);
+}
+
+.app-empty-state__visual svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.8;
+}
+
+.app-empty-state__title {
+  margin: 16px 0 0;
+  color: var(--ws-text, var(--ifly-heading, #1a1a2e));
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+.app-empty-state__description {
+  max-width: 360px;
+  margin: 6px 0 0;
+  color: var(--ws-text-muted, var(--ifly-text-muted, #999));
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.app-empty-state__action {
+  min-height: 36px;
+  margin-top: 18px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--ws-brand);
+  color: var(--ifly-on-brand, #fff);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(var(--brand-rgb), 0.16);
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.app-empty-state__action:hover {
+  background: var(--ifly-blue-hover);
+  box-shadow: 0 8px 20px rgba(var(--brand-rgb), 0.2);
+  transform: translateY(-1px);
+}
+
+.app-empty-state__action:focus-visible {
+  outline: 2px solid rgba(var(--brand-rgb), 0.35);
+  outline-offset: 3px;
+}
+
+.app-empty-state--compact .app-empty-state__visual {
+  width: 44px;
+  height: 44px;
+}
+
+.app-empty-state--compact .app-empty-state__visual svg {
+  width: 20px;
+  height: 20px;
+}
+
+.app-empty-state--compact .app-empty-state__title {
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.app-empty-state--compact .app-empty-state__description {
+  font-size: 12px;
+}
+
+.app-empty-state--compact .app-empty-state__action {
+  min-height: 32px;
+  margin-top: 14px;
+  padding-inline: 13px;
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .app-empty-state {
+    --empty-state-min-height: 180px;
+    padding-inline: 16px;
+  }
+
+  .app-empty-state--compact {
+    --empty-state-min-height: 138px;
+  }
 }

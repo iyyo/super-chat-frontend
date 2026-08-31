@@ -14,14 +14,17 @@ interface ChatMessageProps {
   message: ChatMessageType
   variant?: 'app' | 'workspace'
   insertFileId?: string | null
+  hideAttachments?: boolean
 }
 
 function WorkspaceChatMessage({
   message,
   insertFileId,
+  hideAttachments = false,
 }: {
   message: ChatMessageType
   insertFileId?: string | null
+  hideAttachments?: boolean
 }) {
   const isUser = message.role === 'user'
   const isError = message.status === 'error'
@@ -74,9 +77,9 @@ function WorkspaceChatMessage({
             {isStreaming && <ChatStreamCursor />}
           </div>
         ) : isStreaming ? (
-          <ChatThinkingIndicator />
+          <ChatThinkingIndicator compact />
         ) : null}
-        {message.attachments && message.attachments.length > 0 && (
+        {!hideAttachments && message.attachments && message.attachments.length > 0 && (
           <div className="workspace-msg-attachments">
             {message.attachments.map((file) => (
               <span key={file.id} className="workspace-msg-attachment">
@@ -103,9 +106,20 @@ function WorkspaceChatMessage({
   )
 }
 
-export function ChatMessage({ message, variant = 'app', insertFileId }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  variant = 'app',
+  insertFileId,
+  hideAttachments = false,
+}: ChatMessageProps) {
   if (variant === 'workspace') {
-    return <WorkspaceChatMessage message={message} insertFileId={insertFileId} />
+    return (
+      <WorkspaceChatMessage
+        message={message}
+        insertFileId={insertFileId}
+        hideAttachments={hideAttachments}
+      />
+    )
   }
 
   const isUser = message.role === 'user'

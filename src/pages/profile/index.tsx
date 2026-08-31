@@ -7,12 +7,40 @@ import { authApi } from '@/lib/api/auth'
 import { ApiClientError } from '@/lib/errors/api-client-error'
 import { ROUTES } from '@/lib/constants'
 import { cn } from '@/lib/utils'
+import { useAppStore } from '@/stores/app-store'
 import { useAuthStore } from '@/stores/auth-store'
 import { toast } from '@/stores/toast-store'
 import type { UserProfile } from '@/types/auth'
 import { EditNicknameModal } from './edit-nickname-modal'
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error' | 'expired'
+
+function AppearanceToggle() {
+  const theme = useAppStore((s) => s.theme)
+  const setTheme = useAppStore((s) => s.setTheme)
+
+  return (
+    <div className="profile-appearance">
+      <span className="profile-appearance-label">暗黑阅读模式</span>
+      <div className="profile-appearance-switch" role="group" aria-label="阅读外观">
+        <button
+          type="button"
+          className={cn('profile-appearance-btn', theme === 'light' && 'is-active')}
+          onClick={() => setTheme('light')}
+        >
+          浅色
+        </button>
+        <button
+          type="button"
+          className={cn('profile-appearance-btn', theme === 'dark' && 'is-active')}
+          onClick={() => setTheme('dark')}
+        >
+          深色
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function displayName(profile: UserProfile | null, fallback: string) {
   return profile?.nickname ?? profile?.username ?? fallback
@@ -275,7 +303,8 @@ export function ProfilePage() {
 
       <section className="profile-card profile-preferences-card">
         <p className="import-setting-label">偏好设置</p>
-        <p className="profile-preferences-desc">全局品牌色，官网与工作台同步生效</p>
+        <p className="profile-preferences-desc">阅读外观与全局品牌色，官网与工作台同步生效</p>
+        <AppearanceToggle />
         <BrandThemePanel variant="app" />
       </section>
 
